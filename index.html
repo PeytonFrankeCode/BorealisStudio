@@ -1,0 +1,200 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Borealis Studio — Traffic Tracker</title>
+  <meta name="description" content="Track traffic across all your websites and keep notes on every project." />
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet" />
+  <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 210 110'%3E%3Cpath fill='%232bd4a8' d='M14 78 C70 70 96 96 120 96 C150 96 158 60 150 44 C144 32 126 30 118 44 C112 54 120 66 134 66 C158 66 170 44 168 30 C200 44 212 70 196 92 C176 118 138 120 112 110 C84 100 60 88 38 90 C26 91 18 86 14 78 Z'/%3E%3C/svg%3E" />
+  <link rel="stylesheet" href="styles.css" />
+</head>
+<body>
+  <div class="aurora-bg" aria-hidden="true">
+    <span class="aurora a1"></span>
+    <span class="aurora a2"></span>
+    <span class="aurora a3"></span>
+  </div>
+
+  <header class="topbar">
+    <div class="brand" id="brandHome" role="button" tabindex="0">
+      <svg class="brand-mark" viewBox="0 0 210 110" aria-hidden="true">
+        <defs>
+          <linearGradient id="hWave" x1="0" y1="0" x2="1" y2="0.4">
+            <stop offset="0" stop-color="#7c4dff"/>
+            <stop offset="0.32" stop-color="#3b6fe0"/>
+            <stop offset="0.55" stop-color="#1ea3c4"/>
+            <stop offset="0.75" stop-color="#2bd4a8"/>
+            <stop offset="1" stop-color="#7be36b"/>
+          </linearGradient>
+        </defs>
+        <path fill="url(#hWave)" d="M14 78 C70 70 96 96 120 96 C150 96 158 60 150 44 C144 32 126 30 118 44 C112 54 120 66 134 66 C158 66 170 44 168 30 C200 44 212 70 196 92 C176 118 138 120 112 110 C84 100 60 88 38 90 C26 91 18 86 14 78 Z"/>
+        <path fill="none" stroke="#a7f3d0" stroke-width="2.4" stroke-opacity="0.5" stroke-linecap="round" d="M40 80 C72 76 96 92 120 92"/>
+      </svg>
+      <div class="brand-text">
+        <strong>Borealis Studios</strong>
+        <small>Traffic Tracker</small>
+      </div>
+    </div>
+    <nav class="topbar-actions">
+      <button class="btn ghost" id="exportBtn" title="Export all data as JSON">Export</button>
+      <button class="btn ghost" id="importBtn" title="Import data from JSON">Import</button>
+      <input type="file" id="importFile" accept="application/json" hidden />
+      <button class="btn primary" id="addProjectBtn">+ Add Site</button>
+    </nav>
+  </header>
+
+  <main id="app">
+    <!-- Dashboard view -->
+    <section id="dashboardView" class="view">
+      <div class="page-head">
+        <div>
+          <h1>Overview</h1>
+          <p class="muted">Traffic across all your sites — last 30 days</p>
+        </div>
+        <div class="range-toggle" id="globalRange" role="tablist">
+          <button data-days="7">7d</button>
+          <button data-days="30" class="active">30d</button>
+          <button data-days="90">90d</button>
+        </div>
+      </div>
+
+      <div class="stat-grid" id="statGrid"></div>
+
+      <div class="panel chart-panel">
+        <div class="panel-head">
+          <h2>Total visitors</h2>
+          <span class="muted" id="trendChip"></span>
+        </div>
+        <canvas id="overviewChart" height="240"></canvas>
+      </div>
+
+      <div class="section-head">
+        <h2>Your sites</h2>
+        <span class="muted" id="projectCount"></span>
+      </div>
+      <div class="project-grid" id="projectGrid"></div>
+      <div class="empty-state" id="emptyState" hidden>
+        <svg class="empty-mark" viewBox="0 0 210 110" aria-hidden="true">
+          <defs>
+            <linearGradient id="eWave" x1="0" y1="0" x2="1" y2="0.4">
+              <stop offset="0" stop-color="#7c4dff"/>
+              <stop offset="0.32" stop-color="#3b6fe0"/>
+              <stop offset="0.55" stop-color="#1ea3c4"/>
+              <stop offset="0.75" stop-color="#2bd4a8"/>
+              <stop offset="1" stop-color="#7be36b"/>
+            </linearGradient>
+          </defs>
+          <path fill="url(#eWave)" d="M14 78 C70 70 96 96 120 96 C150 96 158 60 150 44 C144 32 126 30 118 44 C112 54 120 66 134 66 C158 66 170 44 168 30 C200 44 212 70 196 92 C176 118 138 120 112 110 C84 100 60 88 38 90 C26 91 18 86 14 78 Z"/>
+        </svg>
+        <h3>No sites yet</h3>
+        <p class="muted">Add your first website to start tracking traffic and notes.</p>
+        <button class="btn primary" id="emptyAddBtn">+ Add your first site</button>
+      </div>
+    </section>
+
+    <!-- Project detail view -->
+    <section id="detailView" class="view" hidden>
+      <button class="back-link" id="backBtn">← Back to overview</button>
+
+      <div class="detail-head">
+        <div class="detail-title">
+          <span class="dot" id="detailDot"></span>
+          <div>
+            <h1 id="detailName"></h1>
+            <a id="detailDomain" class="muted" target="_blank" rel="noopener"></a>
+          </div>
+        </div>
+        <div class="detail-actions">
+          <div class="range-toggle" id="detailRange" role="tablist">
+            <button data-days="7">7d</button>
+            <button data-days="30" class="active">30d</button>
+            <button data-days="90">90d</button>
+          </div>
+          <button class="btn ghost" id="snippetBtn">Tracking snippet</button>
+          <button class="btn ghost danger" id="deleteProjectBtn">Delete</button>
+        </div>
+      </div>
+
+      <div class="stat-grid" id="detailStats"></div>
+
+      <div class="panel chart-panel">
+        <div class="panel-head">
+          <h2>Visitors &amp; pageviews</h2>
+          <div class="legend">
+            <span class="legend-item"><i class="sw sw-visitors"></i>Visitors</span>
+            <span class="legend-item"><i class="sw sw-views"></i>Pageviews</span>
+          </div>
+        </div>
+        <canvas id="detailChart" height="260"></canvas>
+      </div>
+
+      <div class="detail-columns">
+        <div class="panel">
+          <div class="panel-head">
+            <h2>Notes</h2>
+            <span class="muted" id="notesCount"></span>
+          </div>
+          <form id="noteForm" class="note-form">
+            <textarea id="noteInput" placeholder="Add a note about this project… (ideas, todos, campaign results)" rows="3"></textarea>
+            <div class="note-form-actions">
+              <button type="submit" class="btn primary">Add note</button>
+            </div>
+          </form>
+          <ul class="note-list" id="noteList"></ul>
+        </div>
+
+        <div class="panel">
+          <div class="panel-head"><h2>Top pages</h2></div>
+          <ul class="toppages" id="topPages"></ul>
+        </div>
+      </div>
+    </section>
+  </main>
+
+  <!-- Add project modal -->
+  <div class="modal-backdrop" id="modalBackdrop" hidden>
+    <div class="modal" role="dialog" aria-modal="true" aria-labelledby="modalTitle">
+      <h2 id="modalTitle">Add a site</h2>
+      <form id="projectForm">
+        <label>Site name
+          <input id="pName" type="text" placeholder="My Portfolio" required />
+        </label>
+        <label>Domain
+          <input id="pDomain" type="text" placeholder="example.com" required />
+        </label>
+        <label>Accent color
+          <input id="pColor" type="color" value="#5eead4" />
+        </label>
+        <label class="check">
+          <input id="pSeed" type="checkbox" checked />
+          <span>Seed with sample traffic so I can see how it looks</span>
+        </label>
+        <div class="modal-actions">
+          <button type="button" class="btn ghost" id="cancelModal">Cancel</button>
+          <button type="submit" class="btn primary">Add site</button>
+        </div>
+      </form>
+    </div>
+  </div>
+
+  <!-- Snippet modal -->
+  <div class="modal-backdrop" id="snippetBackdrop" hidden>
+    <div class="modal" role="dialog" aria-modal="true">
+      <h2>Tracking snippet</h2>
+      <p class="muted">Paste this just before <code>&lt;/body&gt;</code> on your site to record real pageviews into this dashboard.</p>
+      <pre class="snippet" id="snippetCode"></pre>
+      <div class="modal-actions">
+        <button type="button" class="btn ghost" id="closeSnippet">Close</button>
+        <button type="button" class="btn primary" id="copySnippet">Copy snippet</button>
+      </div>
+    </div>
+  </div>
+
+  <div class="toast" id="toast" hidden></div>
+
+  <script src="app.js"></script>
+</body>
+</html>
