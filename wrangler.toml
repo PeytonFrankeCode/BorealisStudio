@@ -1,0 +1,15 @@
+name = "borealis-studios-tracker"
+main = "worker/index.js"
+compatibility_date = "2025-01-01"
+
+# Serves the dashboard (public/) for any non-API path.
+[assets]
+directory = "./public"
+binding = "ASSETS"
+
+# D1 database. After `wrangler d1 create borealis_traffic`, paste the
+# returned database_id below.
+[[d1_databases]]
+binding = "DB"
+database_name = "borealis_traffic"
+database_id = "REPLACE_WITH_YOUR_D1_DATABASE_ID"

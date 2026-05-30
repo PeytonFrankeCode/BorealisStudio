@@ -1,56 +1,92 @@
 # Borealis Studios — Traffic Tracker
 
-A lightweight dashboard to track traffic across all of your websites and keep
-notes on every project. Built to match the Borealis Studios aurora-wave brand.
+A dashboard to track traffic across all of your websites and keep notes on every
+project, with a real backend on **Cloudflare Workers + D1**. Styled to match the
+Borealis Studios aurora-wave brand.
 
 ![Dashboard](preview-dashboard.png)
 
 ## Features
 
 - **Multi-site overview** — total visitors, pageviews, active sites, and your
-  top-performing site at a glance, with a combined traffic chart.
+  top-performing site, with a combined traffic chart.
 - **Per-project detail** — visitors vs. pageviews chart, average/day, bounce
-  rate, and top pages for each site.
-- **Notes** — add, timestamp, and delete notes on any project (ideas, todos,
-  campaign results).
-- **Date ranges** — toggle between 7 / 30 / 90 days.
-- **Tracking snippet** — copy a drop-in `<script>` for each site to record real
-  pageviews into the dashboard.
-- **Export / Import** — back up or move all your data as JSON.
-- **Local-first** — everything is stored in your browser's `localStorage`; no
-  account or server required.
+  rate, and top pages.
+- **Notes** — add, timestamp, and delete notes on any project.
+- **Real pageview tracking** — drop a one-line snippet on each site; visits are
+  recorded into a D1 database and counted as unique visitors + pageviews.
+- **Date ranges** — 7 / 30 / 90 days.
+- **Two modes, one codebase**
+  - **Live** — when served by the Worker, the dashboard reads/writes the D1
+    backend (green "● Live" badge).
+  - **Local demo** — open `public/index.html` directly and it runs on seeded
+    sample data in `localStorage`, no backend needed.
 
-## Run it
+## Project layout
 
-It's a zero-build static site. Just open `index.html` in a browser, or serve
-the folder:
+| Path | Purpose |
+|------|---------|
+| `public/` | The dashboard (static HTML/CSS/JS) served by the Worker |
+| `worker/index.js` | API + `/collect` endpoint, talks to D1 |
+| `schema.sql` | D1 tables (`sites`, `events`, `notes`) |
+| `wrangler.toml` | Cloudflare config |
+
+## Deploy to Cloudflare (real tracking)
+
+You need a free Cloudflare account. From this folder:
 
 ```bash
-python3 -m http.server 8000
-# then visit http://localhost:8000
+# 1. Install the CLI and log in
+npm install -g wrangler
+wrangler login
+
+# 2. Create the D1 database, then paste the printed database_id into wrangler.toml
+wrangler d1 create borealis_traffic
+
+# 3. Create the tables
+wrangler d1 execute borealis_traffic --remote --file schema.sql
+
+# 4. Ship it
+wrangler deploy
 ```
 
-The dashboard ships with seeded sample data so you can see how it looks. Use
-**+ Add Site** to add your own, or delete the samples.
+Wrangler prints your URL, e.g. `https://borealis-studios-tracker.<you>.workers.dev`.
+Open it — the badge reads **● Live** and any sites/notes you add are stored in D1.
 
-## How tracking works
+### Add a site and start tracking
 
-Each site has a unique ID. The **Tracking snippet** button on a project page
-gives you a snippet to paste before `</body>` on that site. It fires a pageview
-beacon that the dashboard records. To wire it to a real backend, point the
-snippet's `collect` URL at an endpoint that appends to the project's traffic
-data.
+1. Open your deployed dashboard and click **+ Add Site**.
+2. Open the site, click **Tracking snippet**, and copy it.
+3. Paste it before `</body>` on the website you want to track:
 
-## Files
+```html
+<script>
+(function(){
+  var SITE_ID = "your-site-id";
+  var img = new Image();
+  img.src = "https://your-worker.workers.dev/collect?site=" + SITE_ID +
+            "&path=" + encodeURIComponent(location.pathname) +
+            "&t=" + Date.now();
+})();
+</script>
+```
 
-| File | Purpose |
-|------|---------|
-| `index.html` | Markup and views |
-| `styles.css` | Aurora-themed styling |
-| `app.js` | State, charts, and all interactivity |
-| `logo.svg` | Borealis Studios wave logo |
+That's it — pageviews flow into your dashboard. Each `/collect` hit is one
+pageview; unique visitors are counted per day from a privacy-friendly hash of
+IP + user-agent (no cookies, no personal data stored).
+
+## Develop locally
+
+```bash
+npm install -g wrangler
+wrangler dev          # runs the Worker + a local SQLite D1 at http://localhost:8787
+```
+
+Or, for a quick look without any backend, just open `public/index.html` in a
+browser (local demo mode with sample data).
 
 ## Data & privacy
 
-All data lives in `localStorage` under the key `borealis.studio.v1`. Clearing
-your browser data removes it — export first if you want a backup.
+Live data lives in your Cloudflare D1 database. The tracker stores only a daily
+one-way hash per visitor — no IP addresses, cookies, or personal information.
+In local demo mode, data stays in your browser's `localStorage`.

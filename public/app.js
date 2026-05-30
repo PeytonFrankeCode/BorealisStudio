@@ -17,10 +17,11 @@
   };
 
   /* ----------------------------- State ----------------------------- */
-  let state = load();
+  let state = { projects: [] };
   let currentId = null;
   let globalDays = 30;
   let detailDays = 30;
+  let REMOTE = false; // true when served by the Cloudflare Worker backend
 
   function load() {
     try {
@@ -30,7 +31,38 @@
     return { projects: seedProjects() };
   }
   function save() {
+    if (REMOTE) return; // persistence lives in D1 on the backend
     try { localStorage.setItem(STORE_KEY, JSON.stringify(state)); } catch (e) {}
+  }
+
+  /* --------------------------- Backend API ------------------------- */
+  // When the page is served over http(s) and /api/overview responds, we run
+  // against the live Cloudflare Worker + D1 backend. Otherwise (file://, or a
+  // plain static server) we fall back to a local, demo-seeded localStorage copy.
+  async function bootstrap() {
+    if (location.protocol === "http:" || location.protocol === "https:") {
+      try {
+        const r = await fetch("/api/overview?days=90", { cache: "no-store" });
+        if (r.ok) {
+          const data = await r.json();
+          state = { projects: data.projects || [] };
+          REMOTE = true;
+          return;
+        }
+      } catch (e) { /* fall through to local mode */ }
+    }
+    state = load();
+  }
+
+  async function api(path, opts) {
+    const r = await fetch(path, Object.assign({ headers: { "Content-Type": "application/json" } }, opts));
+    if (!r.ok) throw new Error("Request failed (" + r.status + ")");
+    return r.status === 204 ? null : r.json();
+  }
+
+  async function reloadOverview() {
+    const data = await api("/api/overview?days=90");
+    state.projects = data.projects || [];
   }
 
   /* --------------------------- Seed data --------------------------- */
@@ -109,6 +141,7 @@
   // a same-origin recorder so the demo snippet works out of the box.
   window.Borealis = {
     track(siteId, path) {
+      if (REMOTE) return; // real pageviews are recorded by the Worker /collect endpoint
       const p = state.projects.find((x) => x.id === siteId);
       if (!p) return;
       const today = startOfDay(Date.now());
@@ -376,9 +409,12 @@
           <span class="note-date">${timeAgo(note.ts)}</span>
           <button class="note-del" data-id="${note.id}">Delete</button>
         </div>`;
-      li.querySelector(".note-del").addEventListener("click", () => {
-        p.notes = p.notes.filter((x) => x.id !== note.id);
-        save(); renderNotes(p); toast("Note deleted");
+      li.querySelector(".note-del").addEventListener("click", async () => {
+        try {
+          if (REMOTE) await api("/api/notes/" + note.id, { method: "DELETE" });
+          p.notes = p.notes.filter((x) => x.id !== note.id);
+          save(); renderNotes(p); toast("Note deleted");
+        } catch (err) { toast("Could not delete note"); }
       });
       list.appendChild(li);
     });
@@ -401,34 +437,53 @@
   }
 
   /* --------------------------- Projects ---------------------------- */
-  function addProject(data) {
+  async function addProject(data) {
+    const name = data.name.trim();
+    const domain = data.domain.trim().replace(/^https?:\/\//, "");
+    if (REMOTE) {
+      try {
+        await api("/api/sites", { method: "POST", body: JSON.stringify({ name, domain, color: data.color }) });
+        await reloadOverview();
+        renderDashboard();
+        toast(`Added ${name}`);
+      } catch (err) { toast("Could not add site"); }
+      return;
+    }
     const p = {
-      id: uid(), name: data.name.trim(), domain: data.domain.trim().replace(/^https?:\/\//, ""),
-      color: data.color, created: Date.now(), notes: [],
+      id: uid(), name, domain, color: data.color, created: Date.now(), notes: [],
       traffic: data.seed ? genTraffic(120, 80 + Math.floor(Math.random() * 200), Math.random() - 0.4) : [{ date: startOfDay(Date.now()), visitors: 0, views: 0 }],
       topPages: data.seed ? genTopPages(120) : [],
     };
     state.projects.push(p); save(); renderDashboard();
     toast(`Added ${p.name}`);
   }
-  function deleteProject(id) {
+  async function deleteProject(id) {
     const p = state.projects.find((x) => x.id === id);
     if (!p) return;
     if (!confirm(`Delete "${p.name}" and all its notes? This cannot be undone.`)) return;
-    state.projects = state.projects.filter((x) => x.id !== id);
-    save(); closeDetail(); toast("Site deleted");
+    if (REMOTE) {
+      try {
+        await api("/api/sites/" + id, { method: "DELETE" });
+        await reloadOverview();
+      } catch (err) { return toast("Could not delete site"); }
+    } else {
+      state.projects = state.projects.filter((x) => x.id !== id);
+      save();
+    }
+    closeDetail(); toast("Site deleted");
   }
 
   /* ---------------------------- Snippet ---------------------------- */
   function snippetFor(p) {
-    const origin = location.origin + location.pathname.replace(/index\.html?$/, "");
-    return `<!-- Borealis Studios analytics -->
+    // In live (Worker) mode this is your real dashboard origin; in local demo
+    // mode it still shows the shape you'd deploy.
+    const base = REMOTE ? location.origin : "https://your-worker.workers.dev";
+    return `<!-- Borealis Studios analytics — ${p.name} -->
 <script>
 (function(){
-  var SITE_ID = "${p.id}"; // ${p.name}
-  // Sends a pageview to your Borealis dashboard.
+  var SITE_ID = "${p.id}";
   var img = new Image();
-  img.src = "${origin}collect?site=" + SITE_ID +
+  img.src = "${base}/collect?site=" + SITE_ID +
             "&path=" + encodeURIComponent(location.pathname) +
             "&t=" + Date.now();
 })();
@@ -463,13 +518,22 @@
     $("#brandHome").addEventListener("click", () => { if (currentId) closeDetail(); });
     $("#deleteProjectBtn").addEventListener("click", () => deleteProject(currentId));
 
-    $("#noteForm").addEventListener("submit", (e) => {
+    $("#noteForm").addEventListener("submit", async (e) => {
       e.preventDefault();
       const text = $("#noteInput").value.trim();
       if (!text) return;
       const p = state.projects.find((x) => x.id === currentId);
-      p.notes.push({ id: uid(), text, ts: Date.now() });
-      save(); $("#noteInput").value = ""; renderNotes(p); toast("Note added");
+      try {
+        let note;
+        if (REMOTE) {
+          const res = await api("/api/sites/" + p.id + "/notes", { method: "POST", body: JSON.stringify({ text }) });
+          note = res.note;
+        } else {
+          note = { id: uid(), text, ts: Date.now() };
+        }
+        p.notes.push(note);
+        save(); $("#noteInput").value = ""; renderNotes(p); toast("Note added");
+      } catch (err) { toast("Could not add note"); }
     });
 
     // range toggles
@@ -522,8 +586,25 @@
     });
     window.addEventListener("resize", () => { currentId ? renderDetail() : renderDashboard(); });
 
+    // Mode-specific UI: live backend vs. local demo.
+    const chip = $("#modeChip");
+    if (REMOTE) {
+      chip.textContent = "● Live";
+      chip.classList.add("live");
+      chip.title = "Connected to your Cloudflare backend — tracking real pageviews";
+      const seed = document.querySelector("label.check");
+      if (seed) seed.style.display = "none"; // no fake data in live mode
+      $("#importBtn").style.display = "none"; // import can't push to the live DB
+    } else {
+      chip.textContent = "● Local demo";
+      chip.title = "Running on demo data in this browser. Deploy the Worker for real tracking.";
+    }
+
     renderDashboard();
   }
 
-  document.addEventListener("DOMContentLoaded", init);
+  document.addEventListener("DOMContentLoaded", async () => {
+    await bootstrap();
+    init();
+  });
 })();
