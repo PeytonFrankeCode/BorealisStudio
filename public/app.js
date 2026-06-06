@@ -41,13 +41,19 @@
   }
 
   /* --------------------------- Backend API ------------------------- */
-  // When served over http(s) and /api/health responds, we run against the live
-  // Cloudflare Worker + D1 backend. Otherwise (file://, or a plain static
-  // server) we fall back to a local, demo-seeded localStorage copy.
+  // apiBase points at the Cloudflare Worker. It's "" when the app is served by
+  // the Worker itself (same-origin), or a full URL when this static site is on
+  // GitHub Pages and needs to reach Cloudflare cross-origin.
+  const API_BASE = ((window.BOREALIS_CONFIG && window.BOREALIS_CONFIG.apiBase) || "").replace(/\/$/, "");
+  function apiUrl(path) { return API_BASE + path; }
+
+  // When /api/health responds, we run against the live Cloudflare Worker + D1
+  // backend. Otherwise (file://, or GitHub Pages with no apiBase set) we fall
+  // back to a local, demo-seeded copy so the page still looks complete.
   async function bootstrap() {
-    if (location.protocol === "http:" || location.protocol === "https:") {
+    if (API_BASE || location.protocol === "http:" || location.protocol === "https:") {
       try {
-        const r = await fetch("/api/health", { cache: "no-store" });
+        const r = await fetch(apiUrl("/api/health"), { cache: "no-store" });
         if (r.ok) {
           REMOTE = true;
           const h = await r.json();
@@ -74,7 +80,7 @@
 
   async function api(path, opts) {
     opts = opts || {};
-    const r = await fetch(path, Object.assign({}, opts, { headers: authHeaders(opts.headers) }));
+    const r = await fetch(apiUrl(path), Object.assign({}, opts, { headers: authHeaders(opts.headers) }));
     if (r.status === 401) { const err = new Error("unauthorized"); err.status = 401; throw err; }
     if (!r.ok) throw new Error("Request failed (" + r.status + ")");
     return r.status === 204 ? null : r.json();
@@ -568,9 +574,9 @@
 
   /* ---------------------------- Snippet ---------------------------- */
   function snippetFor(p) {
-    // In live (Worker) mode this is your real dashboard origin; in local demo
-    // mode it shows the production domain you'll deploy to.
-    const base = REMOTE ? location.origin : "https://borealissoftwares.com";
+    // The /collect beacon must hit the Cloudflare Worker: prefer the configured
+    // apiBase, then the current origin if served by the Worker, else the domain.
+    const base = API_BASE || (REMOTE ? location.origin : "https://borealissoftwares.com");
     return `<!-- Borealis Softwares analytics — ${p.name} -->
 <script>
 (function(){

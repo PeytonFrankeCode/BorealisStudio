@@ -45,10 +45,12 @@
     grid.innerHTML = projects.map(card).join("");
   }
 
+  var API_BASE = ((window.BOREALIS_CONFIG && window.BOREALIS_CONFIG.apiBase) || "").replace(/\/$/, "");
+
   async function load() {
-    if (location.protocol === "http:" || location.protocol === "https:") {
+    if (API_BASE || location.protocol === "http:" || location.protocol === "https:") {
       try {
-        var r = await fetch("/api/projects", { cache: "no-store" });
+        var r = await fetch(API_BASE + "/api/projects", { cache: "no-store" });
         if (r.ok) {
           var data = await r.json();
           render(data.projects || []);

@@ -9,16 +9,52 @@ private traffic dashboard, on one Cloudflare Worker + D1 backend.
   pageviews per site, keep private notes, and choose which projects appear on
   the public site.
 
+## How it fits together
+
+```
+  Visitors ─▶ GitHub Pages (public/)         Cloudflare Worker + D1
+             ├─ index.html  (landing)  ──────▶  GET /api/projects   (public feed)
+             └─ dashboard.html (passcode) ────▶  /api/overview, ... (Bearer token)
+                                          ▲
+   Your sites ─▶ /collect beacon ─────────┘  (records pageviews into D1)
+```
+
+- **GitHub Pages** hosts the professional front end (landing + dashboard) with
+  the aurora palette.
+- The **dashboard lives at `/dashboard.html`** and is gated by a passcode.
+- All real data flows through **Cloudflare** (Worker + D1). The front end reaches
+  it by setting one value — `apiBase` in `public/config.js`.
+
+### Connect GitHub Pages to Cloudflare (the important step)
+
+`public/config.js` is the single place that links the two:
+
+```js
+window.BOREALIS_CONFIG = {
+  // Your deployed Worker URL (no trailing slash). Leave "" only if the whole
+  // app is served from Cloudflare itself.
+  apiBase: "https://borealis-softwares.YOURNAME.workers.dev"
+};
+```
+
+- **apiBase set** → the GitHub Pages landing shows your real public projects, and
+  the dashboard passcode unlocks your real Cloudflare data (cross-origin; the
+  Worker already sends permissive CORS and the passcode is a Bearer token, never
+  a cookie).
+- **apiBase empty** → demo/sample mode (no backend), so the page still looks
+  complete for previews.
+
+The passcode itself is **not** in this file — it's the `ADMIN_TOKEN` secret on
+Cloudflare, typed at the dashboard login screen.
+
 ## Two ways to run it
 
-1. **GitHub Pages (preview, no backend)** — push to `main` and the site is
-   published from `public/` by `.github/workflows/pages.yml`. The landing page
-   shows sample projects and the dashboard runs on local demo data. Great for
-   sharing the look, but it does **not** track real traffic.
-2. **Cloudflare (full app, real tracking)** — deploy the Worker + D1 for live
-   pageview tracking, private notes, and the password-protected dashboard. See
-   "Deploy to Cloudflare" below. This is the real production setup for
-   `borealissoftwares.com`.
+1. **GitHub Pages front + Cloudflare data (recommended)** — push to publish the
+   site from `public/` via `.github/workflows/pages.yml`, set `apiBase` in
+   `config.js` to your Worker URL, and deploy the Worker (below). The public
+   front is on Pages; all real data is served by Cloudflare behind the passcode.
+2. **All on Cloudflare** — deploy the Worker, which also serves `public/`. Leave
+   `apiBase` as `""`. Single origin, ideal for `borealissoftwares.com`.
 
 ## How the two sides connect
 
@@ -36,6 +72,7 @@ that feed.
 | `public/landing.css`, `public/landing.js` | Landing styles + project feed |
 | `public/dashboard.html` | Private traffic dashboard |
 | `public/app.js`, `public/styles.css` | Dashboard logic + styles |
+| `public/config.js` | Sets `apiBase` — connects the front end to Cloudflare |
 | `public/logo.svg` | Borealis aurora logo mark |
 | `worker/index.js` | API, `/collect` beacon, auth, talks to D1 |
 | `schema.sql` | D1 tables (`sites`, `events`, `notes`) |
