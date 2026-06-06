@@ -1,10 +1,14 @@
--- Borealis Studios traffic tracker — D1 schema
+-- Borealis Softwares — D1 schema
 CREATE TABLE IF NOT EXISTS sites (
-  id      TEXT PRIMARY KEY,
-  name    TEXT NOT NULL,
-  domain  TEXT NOT NULL,
-  color   TEXT NOT NULL DEFAULT '#2bd4a8',
-  created INTEGER NOT NULL
+  id          TEXT PRIMARY KEY,
+  name        TEXT NOT NULL,
+  domain      TEXT NOT NULL,
+  url         TEXT DEFAULT '',          -- public link (defaults to https://domain)
+  description TEXT DEFAULT '',          -- shown on the public landing page
+  tags        TEXT DEFAULT '',          -- comma-separated tech/labels
+  public      INTEGER NOT NULL DEFAULT 0, -- 1 = show on public site
+  color       TEXT NOT NULL DEFAULT '#34c8a3',
+  created     INTEGER NOT NULL
 );
 
 CREATE TABLE IF NOT EXISTS events (

@@ -1,8 +1,8 @@
-name = "borealis-studios-tracker"
+name = "borealis-softwares"
 main = "worker/index.js"
 compatibility_date = "2025-01-01"
 
-# Serves the dashboard (public/) for any non-API path.
+# Serves the public site (public/) for any non-API path.
 [assets]
 directory = "./public"
 binding = "ASSETS"
@@ -13,3 +13,7 @@ binding = "ASSETS"
 binding = "DB"
 database_name = "borealis_traffic"
 database_id = "REPLACE_WITH_YOUR_D1_DATABASE_ID"
+
+# The dashboard password is stored as a secret, NOT here. Set it with:
+#   wrangler secret put ADMIN_TOKEN
+# When ADMIN_TOKEN is set, /api admin routes and the dashboard require it.

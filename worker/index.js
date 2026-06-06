@@ -1,14 +1,20 @@
-/* Borealis Studios — traffic tracker Worker (Cloudflare Workers + D1)
+/* Borealis Softwares — traffic tracker + public projects API
+ * Cloudflare Workers + D1.
  *
- * Routes:
+ * Public (no auth):
  *   GET    /collect?site=ID&path=/page   -> records a pageview, returns 1x1 gif
+ *   GET    /api/projects                 -> projects marked public (safe fields only)
+ *   GET    /api/health                   -> { ok, authRequired }
+ *
+ * Admin (require Authorization: Bearer <ADMIN_TOKEN> when ADMIN_TOKEN is set):
  *   GET    /api/overview?days=90         -> all sites with traffic, top pages, notes
  *   POST   /api/sites                    -> create a site
+ *   PATCH  /api/sites/:id                -> update editable fields
  *   DELETE /api/sites/:id                -> delete a site (and its data)
  *   POST   /api/sites/:id/notes          -> add a note
  *   DELETE /api/notes/:id                -> delete a note
- *   GET    /api/health                   -> { ok: true }
- * Everything else falls through to the static assets in /public.
+ *
+ * Anything else falls through to the static assets in /public.
  */
 
 const DAY_MS = 86400000;
@@ -27,13 +33,12 @@ export default {
     const { pathname } = url;
     const cors = {
       "Access-Control-Allow-Origin": "*",
-      "Access-Control-Allow-Methods": "GET,POST,DELETE,OPTIONS",
-      "Access-Control-Allow-Headers": "Content-Type",
+      "Access-Control-Allow-Methods": "GET,POST,PATCH,DELETE,OPTIONS",
+      "Access-Control-Allow-Headers": "Content-Type, Authorization",
     };
 
     if (request.method === "OPTIONS") return new Response(null, { headers: cors });
 
-    // Only handle API + collect here; other paths are served as static assets.
     if (pathname !== "/collect" && !pathname.startsWith("/api/")) {
       return env.ASSETS ? env.ASSETS.fetch(request) : new Response("Not found", { status: 404 });
     }
@@ -41,15 +46,22 @@ export default {
     try {
       await ensureSchema(env);
 
+      // ---- Public routes ----
       if (pathname === "/collect") return collect(request, env, url, cors);
-      if (pathname === "/api/health") return json({ ok: true }, cors);
-      if (pathname === "/api/overview") return overview(env, url, cors);
+      if (pathname === "/api/health") return json({ ok: true, authRequired: !!env.ADMIN_TOKEN }, cors);
+      if (pathname === "/api/projects") return publicProjects(env, cors);
 
+      // ---- Admin routes (gated) ----
+      if (!authed(request, env)) return json({ error: "unauthorized" }, cors, 401);
+
+      if (pathname === "/api/overview") return overview(env, url, cors);
       if (pathname === "/api/sites" && request.method === "POST") return createSite(request, env, cors);
 
       let m;
       if ((m = pathname.match(/^\/api\/sites\/([^/]+)\/notes$/)) && request.method === "POST")
         return createNote(m[1], request, env, cors);
+      if ((m = pathname.match(/^\/api\/sites\/([^/]+)$/)) && request.method === "PATCH")
+        return updateSite(m[1], request, env, cors);
       if ((m = pathname.match(/^\/api\/sites\/([^/]+)$/)) && request.method === "DELETE")
         return deleteSite(m[1], env, cors);
       if ((m = pathname.match(/^\/api\/notes\/([^/]+)$/)) && request.method === "DELETE")
@@ -57,10 +69,18 @@ export default {
 
       return json({ error: "not found" }, cors, 404);
     } catch (e) {
-      return json({ error: String(e && e.message || e) }, cors, 500);
+      return json({ error: String((e && e.message) || e) }, cors, 500);
     }
   },
 };
+
+/* ------------------------------- Auth ------------------------------- */
+function authed(request, env) {
+  if (!env.ADMIN_TOKEN) return true; // no token configured -> open (set ADMIN_TOKEN to lock)
+  const h = request.headers.get("Authorization") || "";
+  const token = h.replace(/^Bearer\s+/i, "");
+  return token && token === env.ADMIN_TOKEN;
+}
 
 /* ----------------------------- Handlers ----------------------------- */
 
@@ -89,11 +109,27 @@ async function collect(request, env, url, cors) {
   });
 }
 
+// Public showcase: only safe fields, only sites marked public.
+async function publicProjects(env, cors) {
+  const rows = (await env.DB.prepare(
+    "SELECT id, name, domain, url, description, tags, color FROM sites WHERE public = 1 ORDER BY created DESC"
+  ).all()).results || [];
+  const projects = rows.map((r) => ({
+    name: r.name,
+    url: r.url || ("https://" + r.domain),
+    domain: r.domain,
+    description: r.description || "",
+    tags: r.tags ? r.tags.split(",").map((t) => t.trim()).filter(Boolean) : [],
+    color: r.color,
+  }));
+  return json({ projects }, cors);
+}
+
 async function overview(env, url, cors) {
   const days = Math.min(365, Math.max(1, parseInt(url.searchParams.get("days") || "90", 10)));
   const since = new Date(Date.now() - (days - 1) * DAY_MS).toISOString().slice(0, 10);
   const sites = (await env.DB.prepare(
-    "SELECT id, name, domain, color, created FROM sites ORDER BY created"
+    "SELECT id, name, domain, url, description, tags, public, color, created FROM sites ORDER BY created"
   ).all()).results || [];
 
   const projects = [];
@@ -115,7 +151,8 @@ async function overview(env, url, cors) {
     ).bind(s.id).all()).results || [];
 
     projects.push({
-      id: s.id, name: s.name, domain: s.domain, color: s.color, created: s.created,
+      id: s.id, name: s.name, domain: s.domain, url: s.url || "", description: s.description || "",
+      tags: s.tags || "", public: !!s.public, color: s.color, created: s.created,
       traffic: fillDays(days, byDay),
       topPages: tp.map((r) => ({ path: r.path, hits: r.hits })),
       notes: notes.map((n) => ({ id: n.id, text: n.text, ts: n.ts })),
@@ -129,13 +166,30 @@ async function createSite(request, env, cors) {
   const name = clip((body.name || "").trim(), 120);
   const domain = clip((body.domain || "").trim().replace(/^https?:\/\//, ""), 200);
   if (!name || !domain) return json({ error: "name and domain are required" }, cors, 400);
-  const color = /^#[0-9a-fA-F]{6}$/.test(body.color || "") ? body.color : "#2bd4a8";
+  const color = /^#[0-9a-fA-F]{6}$/.test(body.color || "") ? body.color : "#34c8a3";
   const id = crypto.randomUUID().slice(0, 8);
   const created = Date.now();
   await env.DB.prepare(
-    "INSERT INTO sites (id, name, domain, color, created) VALUES (?,?,?,?,?)"
-  ).bind(id, name, domain, color, created).run();
-  return json({ project: { id, name, domain, color, created } }, cors, 201);
+    "INSERT INTO sites (id, name, domain, url, description, tags, public, color, created) VALUES (?,?,?,?,?,?,?,?,?)"
+  ).bind(id, name, domain, "", "", "", 0, color, created).run();
+  return json({ project: { id, name, domain, url: "", description: "", tags: "", public: false, color, created } }, cors, 201);
+}
+
+async function updateSite(id, request, env, cors) {
+  const body = await readJson(request);
+  const fields = [];
+  const vals = [];
+  if (body.name != null) { fields.push("name = ?"); vals.push(clip(String(body.name).trim(), 120)); }
+  if (body.domain != null) { fields.push("domain = ?"); vals.push(clip(String(body.domain).trim().replace(/^https?:\/\//, ""), 200)); }
+  if (body.url != null) { fields.push("url = ?"); vals.push(clip(String(body.url).trim(), 300)); }
+  if (body.description != null) { fields.push("description = ?"); vals.push(clip(String(body.description), 600)); }
+  if (body.tags != null) { fields.push("tags = ?"); vals.push(clip(String(body.tags), 300)); }
+  if (body.color != null && /^#[0-9a-fA-F]{6}$/.test(body.color)) { fields.push("color = ?"); vals.push(body.color); }
+  if (body.public != null) { fields.push("public = ?"); vals.push(body.public ? 1 : 0); }
+  if (!fields.length) return json({ error: "no fields to update" }, cors, 400);
+  vals.push(id);
+  await env.DB.prepare("UPDATE sites SET " + fields.join(", ") + " WHERE id = ?").bind(...vals).run();
+  return json({ ok: true }, cors);
 }
 
 async function deleteSite(id, env, cors) {
@@ -171,7 +225,9 @@ async function ensureSchema(env) {
   await env.DB.batch([
     env.DB.prepare(
       "CREATE TABLE IF NOT EXISTS sites (id TEXT PRIMARY KEY, name TEXT NOT NULL, " +
-      "domain TEXT NOT NULL, color TEXT NOT NULL DEFAULT '#2bd4a8', created INTEGER NOT NULL)"
+      "domain TEXT NOT NULL, url TEXT DEFAULT '', description TEXT DEFAULT '', " +
+      "tags TEXT DEFAULT '', public INTEGER NOT NULL DEFAULT 0, " +
+      "color TEXT NOT NULL DEFAULT '#34c8a3', created INTEGER NOT NULL)"
     ),
     env.DB.prepare(
       "CREATE TABLE IF NOT EXISTS events (id INTEGER PRIMARY KEY AUTOINCREMENT, " +
@@ -185,6 +241,13 @@ async function ensureSchema(env) {
     ),
     env.DB.prepare("CREATE INDEX IF NOT EXISTS idx_notes_site ON notes (site_id)"),
   ]);
+  // Best-effort migrations for databases created before the public fields existed.
+  for (const col of [
+    "url TEXT DEFAULT ''", "description TEXT DEFAULT ''", "tags TEXT DEFAULT ''",
+    "public INTEGER NOT NULL DEFAULT 0",
+  ]) {
+    try { await env.DB.prepare("ALTER TABLE sites ADD COLUMN " + col).run(); } catch (e) { /* exists */ }
+  }
   schemaReady = true;
 }
 

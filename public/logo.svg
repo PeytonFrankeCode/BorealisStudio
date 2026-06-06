@@ -1,31 +1,16 @@
-<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 240 150" role="img" aria-label="Borealis Studios">
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 210 80" fill="none">
   <defs>
-    <linearGradient id="bWave" x1="0" y1="0" x2="1" y2="0.35">
-      <stop offset="0" stop-color="#7c4dff"/>
-      <stop offset="0.32" stop-color="#3b6fe0"/>
-      <stop offset="0.55" stop-color="#1ea3c4"/>
-      <stop offset="0.75" stop-color="#2bd4a8"/>
-      <stop offset="1" stop-color="#7be36b"/>
+    <linearGradient id="bGrad" x1="0" y1="0" x2="1" y2="0.15">
+      <stop offset="0" stop-color="#2fc6a0"/>
+      <stop offset="0.34" stop-color="#2f8fd0"/>
+      <stop offset="0.68" stop-color="#5a5cd0"/>
+      <stop offset="1" stop-color="#8a4dff"/>
     </linearGradient>
   </defs>
-  <!-- Aurora wave swoosh: long tail sweeping left, curling into a wave on the right -->
-  <path fill="url(#bWave)" d="
-    M14 78
-    C70 70 96 96 120 96
-    C150 96 158 60 150 44
-    C144 32 126 30 118 44
-    C112 54 120 66 134 66
-    C158 66 170 44 168 30
-    C200 44 212 70 196 92
-    C176 118 138 120 112 110
-    C84 100 60 88 38 90
-    C26 91 18 86 14 78 Z"/>
-  <!-- inner crest highlight -->
-  <path fill="none" stroke="#a7f3d0" stroke-width="2" stroke-opacity="0.45" stroke-linecap="round" d="
-    M40 80 C72 76 96 92 120 92"/>
-  <!-- Wordmark -->
-  <g fill="#0f2742" font-family="Inter, Arial, sans-serif">
-    <text x="120" y="132" text-anchor="middle" font-size="30" font-weight="800" letter-spacing="2">BOREALIS</text>
-    <text x="120" y="148" text-anchor="middle" font-size="11" font-weight="600" letter-spacing="7">STUDIOS</text>
+  <g stroke="url(#bGrad)" stroke-width="5.5" stroke-linecap="round" stroke-linejoin="round">
+    <!-- lower ribbon: long sweep that dips then rises into a crest on the right -->
+    <path d="M8 50 C40 52 58 60 86 52 C112 45 120 24 142 22 C168 19 176 44 200 30"/>
+    <!-- upper ribbon: crosses over the lower and peaks higher -->
+    <path d="M16 36 C48 38 66 30 92 38 C116 45 128 12 152 12 C178 12 184 34 206 18"/>
   </g>
 </svg>
