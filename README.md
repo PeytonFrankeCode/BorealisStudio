@@ -116,9 +116,25 @@ for the password you set in step 4.
 
 ### Point your domain at it
 
-In the Cloudflare dashboard, add `borealissoftwares.com` to your account, then
-under **Workers & Pages → your worker → Settings → Domains & Routes**, add the
-custom domain `borealissoftwares.com`.
+A domain can only point to one host, so pick the layout that matches how you
+want to run it:
+
+**A) GitHub Pages front + Cloudflare data (the recommended split)**
+- Apex `borealissoftwares.com` → **GitHub Pages**. The `public/CNAME` file
+  already requests this domain; in repo **Settings → Pages → Custom domain**
+  enter `borealissoftwares.com` and add the DNS records GitHub shows you.
+- The Worker keeps its own address — either its `*.workers.dev` URL or a
+  subdomain like `api.borealissoftwares.com` (Cloudflare → your Worker →
+  **Settings → Domains & Routes → Add custom domain**).
+- Put that Worker address in `public/config.js` as `apiBase`.
+
+**B) Everything on Cloudflare (single origin)**
+- Delete `public/CNAME` (it's only for GitHub Pages), leave `apiBase` as `""`,
+  and in Cloudflare → your Worker → **Settings → Domains & Routes** add the
+  custom domain `borealissoftwares.com`.
+
+Wrangler prints your Worker URL on deploy (e.g.
+`https://borealis-softwares.<you>.workers.dev`).
 
 ## Security model
 
