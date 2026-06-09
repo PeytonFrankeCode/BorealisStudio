@@ -1,0 +1,130 @@
+project:
+  name: Borealis Softwares
+  description: >-
+    A professional studio website with a public front page and a
+    password-protected traffic dashboard. Tracks pageviews across multiple
+    sites and stores private notes per project. Built to run entirely on
+    Cloudflare.
+  domain: borealissoftwares.com
+  repository: PeytonFrankeCode/BorealisStudio
+  status: live
+
+architecture:
+  hosting: All-on-Cloudflare (Worker serves the site and the API)
+  frontend: Static HTML/CSS/vanilla JS in public/, served by the Worker
+  backend: Cloudflare Worker (worker/index.js)
+  database: Cloudflare D1 (name "borealis_traffic")
+  deploy: Cloudflare connected to the GitHub repo, runs "npx wrangler deploy"
+  notes: >-
+    The site has two faces. The public landing page shows only projects marked
+    public (name, link, description, tags, color). The dashboard at
+    /dashboard.html is gated by a passcode and shows real traffic and private
+    notes. When no backend is reachable, the front end falls back to demo data.
+
+pages:
+  public_front: https://borealissoftwares.com/
+  dashboard: https://borealissoftwares.com/dashboard.html
+
+design:
+  brand: Borealis Softwares
+  logo: Twin-ribbon aurora wave (public/logo.svg), recreated as inline SVG
+  palette:
+    teal: "#34c8a3"
+    blue: "#2f8fd0"
+    indigo: "#5a5cd0"
+    purple: "#8a4dff"
+  theme: Dark, premium, aurora gradients
+
+security:
+  dashboard_passcode:
+    mechanism: Cloudflare secret named ADMIN_TOKEN
+    enforcement: >-
+      Admin API routes and the dashboard require an Authorization Bearer token
+      that matches ADMIN_TOKEN. Sent as a header (not a cookie), so cross-origin
+      is safe.
+    storage: Stored only as a Cloudflare secret, never committed to the repo
+  visitor_privacy: >-
+    Unique visitors counted via a daily one-way hash of IP + user-agent.
+    No cookies, no IP addresses, and no personal data are stored.
+  public_feed: /api/projects exposes only safe fields, never traffic or notes
+
+key_files:
+  public/index.html: Public landing page
+  public/landing.css: Landing page styles
+  public/landing.js: Fetches the public project feed
+  public/dashboard.html: Private traffic dashboard
+  public/app.js: Dashboard logic, charts, auth, notes
+  public/styles.css: Dashboard styles
+  public/config.js: Sets apiBase (empty for same-origin all-Cloudflare setup)
+  public/logo.svg: Aurora wave logo mark
+  worker/index.js: API, /collect beacon, auth, D1 access
+  schema.sql: D1 tables (sites, events, notes)
+  wrangler.toml: Cloudflare config (Worker name + D1 binding)
+  SETUP.md: Browser-only, no-terminal setup guide (works from an iPad)
+  README.md: Project overview and architecture
+
+worker_api:
+  public_routes:
+    - GET /collect?site=ID&path=/page  # records a pageview, returns 1x1 gif
+    - GET /api/projects                # public projects (safe fields only)
+    - GET /api/health                  # { ok, authRequired }
+  admin_routes_require_token:
+    - GET /api/overview?days=90        # all sites, traffic, top pages, notes
+    - POST /api/sites                  # create a site
+    - PATCH /api/sites/:id             # update editable/public fields
+    - DELETE /api/sites/:id            # delete a site and its data
+    - POST /api/sites/:id/notes        # add a note
+    - DELETE /api/notes/:id            # delete a note
+
+cloudflare_setup:
+  worker_name: borealisstudio  # must match wrangler.toml name
+  d1_database_name: borealis_traffic
+  d1_database_id: 22d3429d-879d-40cc-a686-b127e692ae6f
+  d1_binding_variable: DB
+  required_secret: ADMIN_TOKEN  # the dashboard passcode
+  custom_domain: borealissoftwares.com attached to the Worker
+  dns_note: >-
+    Domain registered on Cloudflare, so nameserver changes were not needed.
+    A single "Worker" DNS record is expected and correct for this setup.
+
+contact:
+  email: borealissoftwares@gmail.com
+  note: >-
+    Uses a Gmail address so mail works immediately without setting up domain
+    email (MX/SPF). The Cloudflare email warning can be safely ignored.
+
+how_to_use:
+  add_a_site:
+    - Open /dashboard.html and log in with the passcode
+    - Tap "+ Add Site", enter name and domain
+    - Open the site, fill in its Public profile, toggle "Show on public site"
+  track_traffic:
+    - Open a site in the dashboard, tap "Tracking snippet", copy it
+    - Paste the snippet before </body> (or in <head>) on the site to track
+    - Visits appear on the dashboard within seconds
+
+journey:
+  - Started from an empty repo on branch claude/borealis-traffic-tracker-CJQAR
+  - Built a static localStorage traffic dashboard (Borealis Studios)
+  - Added a real Cloudflare Worker + D1 backend for live pageview tracking
+  - Rebranded to Borealis Softwares with the new twin-ribbon aurora logo
+  - Added a public landing page and a password-protected dashboard
+  - Connected the front end to Cloudflare data via config.js
+  - Set borealissoftwares.com as the production domain
+  - Switched to all-on-Cloudflare hosting; added iPad-friendly SETUP.md
+  - Pointed the contact button at borealissoftwares@gmail.com
+  - Fixed the deploy (matched Worker name, added the real D1 database_id)
+  - Site went live on Cloudflare
+
+pull_request:
+  number: 1
+  url: https://github.com/PeytonFrankeCode/BorealisStudio/pull/1
+  base: main
+  head: claude/borealis-traffic-tracker-CJQAR
+  note: Open PR collecting all the work; merge to publish from main
+
+possible_next_steps:
+  - Replace the sample projects (Aurora Portfolio, Northern Blog) with real ones
+  - Add custom-domain email (Cloudflare Email Routing) if a branded inbox is wanted
+  - Adjust the tracking snippet (e.g. count only unique visits, or button clicks)
+  - Merge PR #1 into main
