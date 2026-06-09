@@ -3,6 +3,10 @@
 The public site for **Borealis Softwares** (borealissoftwares.com) plus a
 private traffic dashboard, on one Cloudflare Worker + D1 backend.
 
+> **Setting this up?** Follow **[SETUP.md](SETUP.md)** — a step-by-step,
+> browser-only guide that needs no computer or terminal (works from an iPad).
+> The whole site runs on Cloudflare; your domain points there.
+
 - **Public landing page** (`/`) — a professional, dark "aurora" site that shows
   your projects to visitors. Read-only; it only ever exposes safe project info.
 - **Private dashboard** (`/dashboard.html`) — password-protected. Track real

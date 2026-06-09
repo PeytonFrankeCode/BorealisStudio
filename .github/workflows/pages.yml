@@ -1,12 +1,10 @@
 name: Deploy to GitHub Pages
 
-# Publishes the static site in public/ so you can view it straight from the
-# repo (demo/sample data only — no backend). For real traffic tracking, deploy
-# to Cloudflare with the deploy.yml workflow.
+# OPTIONAL preview only. The production site runs entirely on Cloudflare (see
+# deploy.yml), so this workflow is manual-only — run it from the Actions tab if
+# you ever want a static, demo-data preview on GitHub Pages.
 
 on:
-  push:
-    branches: [main, claude/borealis-traffic-tracker-CJQAR]
   workflow_dispatch:
 
 permissions:
