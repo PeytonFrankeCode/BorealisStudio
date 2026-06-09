@@ -17,7 +17,7 @@ binding = "ASSETS"
 [[d1_databases]]
 binding = "DB"
 database_name = "borealis_traffic"
-database_id = "PASTE_YOUR_DATABASE_ID_HERE"
+database_id = "22d3429d-879d-40cc-a686-b127e692ae6f"
 
 # The dashboard password is a dashboard secret, not in this file:
 #   Settings -> Variables and Secrets -> add secret ADMIN_TOKEN
