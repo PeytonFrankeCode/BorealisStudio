@@ -1,4 +1,4 @@
-/* Borealis Softwares — public landing logic
+/* Borealis Software — public landing logic
  * Fetches the public projects feed from the Worker. When opened as a static
  * file (no backend), it shows a small sample so the page still looks complete.
  */
@@ -6,10 +6,10 @@
   "use strict";
 
   var SAMPLE = [
-    { name: "Borealis Softwares", url: "https://borealissoftwares.com", domain: "borealissoftwares.com",
-      description: "Studio site and home base for everything we build.", tags: ["Brand", "Web"], color: "#34c8a3" },
+    { name: "Borealis Software", url: "https://borealissoftwares.com", domain: "borealissoftwares.com",
+      description: "Our studio home base — designed, built, and managed in-house.", tags: ["Brand", "Web"], color: "#34c8a3" },
     { name: "Aurora Portfolio", url: "https://aurora.design", domain: "aurora.design",
-      description: "A clean portfolio template for creative freelancers.", tags: ["Next.js", "Design"], color: "#2f8fd0" },
+      description: "A clean portfolio site we built and run ourselves.", tags: ["Next.js", "Design"], color: "#2f8fd0" },
   ];
 
   function esc(s) {

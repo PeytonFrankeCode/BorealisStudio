@@ -1,16 +1,18 @@
-<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 210 80" fill="none">
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 200 140" fill="none">
   <defs>
-    <linearGradient id="bGrad" x1="0" y1="0" x2="1" y2="0.15">
-      <stop offset="0" stop-color="#2fc6a0"/>
-      <stop offset="0.34" stop-color="#2f8fd0"/>
-      <stop offset="0.68" stop-color="#5a5cd0"/>
-      <stop offset="1" stop-color="#8a4dff"/>
+    <linearGradient id="bGrad" gradientUnits="userSpaceOnUse" x1="10" y1="125" x2="190" y2="10">
+      <stop offset="0" stop-color="#6cae8e"/>
+      <stop offset="0.4" stop-color="#4b7da6"/>
+      <stop offset="0.7" stop-color="#46699f"/>
+      <stop offset="1" stop-color="#7e5ec4"/>
     </linearGradient>
   </defs>
-  <g stroke="url(#bGrad)" stroke-width="5.5" stroke-linecap="round" stroke-linejoin="round">
-    <!-- lower ribbon: long sweep that dips then rises into a crest on the right -->
-    <path d="M8 50 C40 52 58 60 86 52 C112 45 120 24 142 22 C168 19 176 44 200 30"/>
-    <!-- upper ribbon: crosses over the lower and peaks higher -->
-    <path d="M16 36 C48 38 66 30 92 38 C116 45 128 12 152 12 C178 12 184 34 206 18"/>
+  <g stroke="url(#bGrad)" stroke-width="8" stroke-linecap="round" stroke-linejoin="round">
+    <!-- upper ribbon: from the tail, crests high, dips, rises toward the leaf -->
+    <path d="M14 120 C20 92 38 62 66 52 C94 42 102 80 126 82 C144 84 152 64 158 46"/>
+    <!-- lower ribbon: from the tail, stays low, weaves up across the upper one -->
+    <path d="M14 120 C34 100 58 84 86 86 C112 88 120 52 142 50 C152 49 161 52 167 59"/>
+    <!-- leaf tip at the upper right, outlined with a white interior -->
+    <path d="M158 46 C164 30 174 17 186 6 C190 26 184 50 170 64 C160 72 154 58 158 46 Z"/>
   </g>
 </svg>

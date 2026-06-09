@@ -1,4 +1,4 @@
-/* Borealis Softwares — front-end config
+/* Borealis Software — front-end config
  * ---------------------------------------------------------------------------
  * This is the ONE place you connect the GitHub Pages site to your real data.
  *

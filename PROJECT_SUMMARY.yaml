@@ -1,5 +1,5 @@
 project:
-  name: Borealis Softwares
+  name: Borealis Software
   description: >-
     A professional studio website with a public front page and a
     password-protected traffic dashboard. Tracks pageviews across multiple
@@ -26,7 +26,7 @@ pages:
   dashboard: https://borealissoftwares.com/dashboard.html
 
 design:
-  brand: Borealis Softwares
+  brand: Borealis Software
   logo: Twin-ribbon aurora wave (public/logo.svg), recreated as inline SVG
   palette:
     teal: "#34c8a3"
@@ -107,7 +107,7 @@ journey:
   - Started from an empty repo on branch claude/borealis-traffic-tracker-CJQAR
   - Built a static localStorage traffic dashboard (Borealis Studios)
   - Added a real Cloudflare Worker + D1 backend for live pageview tracking
-  - Rebranded to Borealis Softwares with the new twin-ribbon aurora logo
+  - Rebranded to Borealis Software with the new twin-ribbon aurora logo
   - Added a public landing page and a password-protected dashboard
   - Connected the front end to Cloudflare data via config.js
   - Set borealissoftwares.com as the production domain
