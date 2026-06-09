@@ -1,0 +1,19 @@
+name = "borealis-softwares"
+main = "worker/index.js"
+compatibility_date = "2025-01-01"
+
+# Serves the public site (public/) for any non-API path.
+[assets]
+directory = "./public"
+binding = "ASSETS"
+
+# D1 database. After `wrangler d1 create borealis_traffic`, paste the
+# returned database_id below.
+[[d1_databases]]
+binding = "DB"
+database_name = "borealis_traffic"
+database_id = "REPLACE_WITH_YOUR_D1_DATABASE_ID"
+
+# The dashboard password is stored as a secret, NOT here. Set it with:
+#   wrangler secret put ADMIN_TOKEN
+# When ADMIN_TOKEN is set, /api admin routes and the dashboard require it.

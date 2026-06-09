@@ -1,15 +1,17 @@
-/* Borealis Studios — Traffic Tracker
- * Zero-dependency, localStorage-backed dashboard.
+/* Borealis Softwares — Traffic Dashboard
+ * Zero-dependency dashboard. Talks to the Cloudflare Worker + D1 backend when
+ * served by it (with password auth); falls back to a local demo otherwise.
  */
 (function () {
   "use strict";
 
   const STORE_KEY = "borealis.studio.v1";
+  const TOKEN_KEY = "borealis.admin.token";
   const DAY = 86400000;
 
-  /* ---------- Palette (from the Borealis Studios aurora-wave logo) ---------- */
+  /* ---------- Palette (from the Borealis Softwares aurora logo) ---------- */
   const C = {
-    visitors: "#34d8b4", // teal-green
+    visitors: "#34c8a3", // teal-green
     views: "#6f7bf7",    // indigo
     grid: "rgba(120,160,220,0.10)",
     text: "#e7eefb",
@@ -17,10 +19,14 @@
   };
 
   /* ----------------------------- State ----------------------------- */
-  let state = load();
+  let state = { projects: [] };
   let currentId = null;
   let globalDays = 30;
   let detailDays = 30;
+  let REMOTE = false;        // true when served by the Cloudflare Worker backend
+  let authRequired = false;  // backend has an ADMIN_TOKEN configured
+  let needLogin = false;     // logged out / wrong password
+  let adminToken = "";
 
   function load() {
     try {
@@ -30,23 +36,113 @@
     return { projects: seedProjects() };
   }
   function save() {
+    if (REMOTE) return; // persistence lives in D1 on the backend
     try { localStorage.setItem(STORE_KEY, JSON.stringify(state)); } catch (e) {}
   }
+
+  /* --------------------------- Backend API ------------------------- */
+  // apiBase points at the Cloudflare Worker. It's "" when the app is served by
+  // the Worker itself (same-origin), or a full URL when this static site is on
+  // GitHub Pages and needs to reach Cloudflare cross-origin.
+  const API_BASE = ((window.BOREALIS_CONFIG && window.BOREALIS_CONFIG.apiBase) || "").replace(/\/$/, "");
+  function apiUrl(path) { return API_BASE + path; }
+
+  // When /api/health responds, we run against the live Cloudflare Worker + D1
+  // backend. Otherwise (file://, or GitHub Pages with no apiBase set) we fall
+  // back to a local, demo-seeded copy so the page still looks complete.
+  async function bootstrap() {
+    if (API_BASE || location.protocol === "http:" || location.protocol === "https:") {
+      try {
+        const r = await fetch(apiUrl("/api/health"), { cache: "no-store" });
+        if (r.ok) {
+          REMOTE = true;
+          const h = await r.json();
+          authRequired = !!h.authRequired;
+          adminToken = localStorage.getItem(TOKEN_KEY) || "";
+          try {
+            await reloadOverview();
+          } catch (e) {
+            if (e.status === 401) { needLogin = true; state = { projects: [] }; }
+            else throw e;
+          }
+          return;
+        }
+      } catch (e) { /* fall through to local mode */ }
+    }
+    state = load();
+  }
+
+  function authHeaders(extra) {
+    const h = Object.assign({ "Content-Type": "application/json" }, extra || {});
+    if (adminToken) h["Authorization"] = "Bearer " + adminToken;
+    return h;
+  }
+
+  async function api(path, opts) {
+    opts = opts || {};
+    const r = await fetch(apiUrl(path), Object.assign({}, opts, { headers: authHeaders(opts.headers) }));
+    if (r.status === 401) { const err = new Error("unauthorized"); err.status = 401; throw err; }
+    if (!r.ok) throw new Error("Request failed (" + r.status + ")");
+    return r.status === 204 ? null : r.json();
+  }
+
+  async function reloadOverview() {
+    const data = await api("/api/overview?days=90");
+    state.projects = data.projects || [];
+  }
+
+  async function tryLogin(pw) {
+    adminToken = (pw || "").trim();
+    try {
+      await reloadOverview();
+      localStorage.setItem(TOKEN_KEY, adminToken);
+      needLogin = false;
+      hideLogin();
+      renderDashboard();
+      toast("Unlocked");
+    } catch (e) {
+      adminToken = "";
+      toast("Incorrect password");
+    }
+  }
+
+  function logout() {
+    adminToken = "";
+    localStorage.removeItem(TOKEN_KEY);
+    needLogin = true;
+    state = { projects: [] };
+    if (currentId) closeDetail();
+    renderDashboard();
+    showLogin();
+  }
+
+  function showLogin() {
+    const ov = $("#loginBackdrop");
+    if (ov) { ov.hidden = false; const f = $("#loginInput"); if (f) { f.value = ""; f.focus(); } }
+  }
+  function hideLogin() { const ov = $("#loginBackdrop"); if (ov) ov.hidden = true; }
 
   /* --------------------------- Seed data --------------------------- */
   function seedProjects() {
     const presets = [
-      { name: "Borealis Studios", domain: "borealisstudios.com", color: "#34d8b4", base: 320, growth: 1.2 },
-      { name: "Aurora Portfolio", domain: "aurora.design", color: "#6f7bf7", base: 140, growth: 0.6 },
-      { name: "Northern Blog", domain: "northernlights.blog", color: "#c084fc", base: 210, growth: -0.3 },
+      { name: "Borealis Softwares", domain: "borealissoftwares.com", color: "#34c8a3", base: 320, growth: 1.2,
+        description: "Studio site and home base for everything we build.", tags: "Brand, Web", public: true },
+      { name: "Aurora Portfolio", domain: "aurora.design", color: "#2f8fd0", base: 140, growth: 0.6,
+        description: "A clean portfolio template for creative freelancers.", tags: "Next.js, Design", public: true },
+      { name: "Northern Blog", domain: "northernlights.blog", color: "#8a4dff", base: 210, growth: -0.3,
+        description: "Long-form writing on software, design, and the north.", tags: "Writing", public: false },
     ];
     return presets.map((p) => ({
       id: uid(),
       name: p.name,
       domain: p.domain,
+      url: "https://" + p.domain,
+      description: p.description,
+      tags: p.tags,
+      public: p.public,
       color: p.color,
       created: Date.now(),
-      notes: p.name === "Borealis Studios"
+      notes: p.name === "Borealis Softwares"
         ? [{ id: uid(), text: "Launched the new landing page — watching bounce rate this week.", ts: Date.now() - 2 * DAY }]
         : [],
       traffic: genTraffic(120, p.base, p.growth),
@@ -109,6 +205,7 @@
   // a same-origin recorder so the demo snippet works out of the box.
   window.Borealis = {
     track(siteId, path) {
+      if (REMOTE) return; // real pageviews are recorded by the Worker /collect endpoint
       const p = state.projects.find((x) => x.id === siteId);
       if (!p) return;
       const today = startOfDay(Date.now());
@@ -307,7 +404,7 @@
       </div>
       <canvas class="spark" id="spark-${p.id}"></canvas>
       <div class="pc-foot">
-        <span>${p.notes.length} note${p.notes.length === 1 ? "" : "s"}</span>
+        <span>${p.notes.length} note${p.notes.length === 1 ? "" : "s"}${p.public ? " · public" : ""}</span>
         <span class="badge">${globalDays}d</span>
       </div>`;
     card.addEventListener("click", () => openDetail(p.id));
@@ -358,6 +455,40 @@
 
     renderNotes(p);
     renderTopPages(p);
+    renderProfile(p);
+  }
+
+  /* ----------------------- Public profile editor ------------------- */
+  function renderProfile(p) {
+    if (!$("#profileForm")) return;
+    $("#profPublic").checked = !!p.public;
+    $("#profUrl").value = p.url || ("https://" + p.domain);
+    $("#profTags").value = p.tags || "";
+    $("#profDesc").value = p.description || "";
+    const chip = $("#publicBadge");
+    if (chip) {
+      chip.textContent = p.public ? "Public" : "Hidden";
+      chip.classList.toggle("on", !!p.public);
+    }
+  }
+
+  async function saveProfile() {
+    const p = state.projects.find((x) => x.id === currentId);
+    if (!p) return;
+    const patch = {
+      public: $("#profPublic").checked,
+      url: $("#profUrl").value.trim(),
+      tags: $("#profTags").value.trim(),
+      description: $("#profDesc").value.trim(),
+    };
+    try {
+      if (REMOTE) await api("/api/sites/" + p.id, { method: "PATCH", body: JSON.stringify(patch) });
+      Object.assign(p, patch);
+      save(); renderProfile(p); toast("Public profile saved");
+    } catch (err) {
+      toast(err.status === 401 ? "Session expired — please unlock" : "Could not save");
+      if (err.status === 401) logout();
+    }
   }
 
   function renderNotes(p) {
@@ -376,9 +507,12 @@
           <span class="note-date">${timeAgo(note.ts)}</span>
           <button class="note-del" data-id="${note.id}">Delete</button>
         </div>`;
-      li.querySelector(".note-del").addEventListener("click", () => {
-        p.notes = p.notes.filter((x) => x.id !== note.id);
-        save(); renderNotes(p); toast("Note deleted");
+      li.querySelector(".note-del").addEventListener("click", async () => {
+        try {
+          if (REMOTE) await api("/api/notes/" + note.id, { method: "DELETE" });
+          p.notes = p.notes.filter((x) => x.id !== note.id);
+          save(); renderNotes(p); toast("Note deleted");
+        } catch (err) { toast("Could not delete note"); }
       });
       list.appendChild(li);
     });
@@ -401,9 +535,20 @@
   }
 
   /* --------------------------- Projects ---------------------------- */
-  function addProject(data) {
+  async function addProject(data) {
+    const name = data.name.trim();
+    const domain = data.domain.trim().replace(/^https?:\/\//, "");
+    if (REMOTE) {
+      try {
+        await api("/api/sites", { method: "POST", body: JSON.stringify({ name, domain, color: data.color }) });
+        await reloadOverview();
+        renderDashboard();
+        toast(`Added ${name}`);
+      } catch (err) { toast(err.status === 401 ? "Session expired — please unlock" : "Could not add site"); if (err.status === 401) logout(); }
+      return;
+    }
     const p = {
-      id: uid(), name: data.name.trim(), domain: data.domain.trim().replace(/^https?:\/\//, ""),
+      id: uid(), name, domain, url: "https://" + domain, description: "", tags: "", public: false,
       color: data.color, created: Date.now(), notes: [],
       traffic: data.seed ? genTraffic(120, 80 + Math.floor(Math.random() * 200), Math.random() - 0.4) : [{ date: startOfDay(Date.now()), visitors: 0, views: 0 }],
       topPages: data.seed ? genTopPages(120) : [],
@@ -411,24 +556,33 @@
     state.projects.push(p); save(); renderDashboard();
     toast(`Added ${p.name}`);
   }
-  function deleteProject(id) {
+  async function deleteProject(id) {
     const p = state.projects.find((x) => x.id === id);
     if (!p) return;
     if (!confirm(`Delete "${p.name}" and all its notes? This cannot be undone.`)) return;
-    state.projects = state.projects.filter((x) => x.id !== id);
-    save(); closeDetail(); toast("Site deleted");
+    if (REMOTE) {
+      try {
+        await api("/api/sites/" + id, { method: "DELETE" });
+        await reloadOverview();
+      } catch (err) { return toast(err.status === 401 ? "Session expired — please unlock" : "Could not delete site"); }
+    } else {
+      state.projects = state.projects.filter((x) => x.id !== id);
+      save();
+    }
+    closeDetail(); toast("Site deleted");
   }
 
   /* ---------------------------- Snippet ---------------------------- */
   function snippetFor(p) {
-    const origin = location.origin + location.pathname.replace(/index\.html?$/, "");
-    return `<!-- Borealis Studios analytics -->
+    // The /collect beacon must hit the Cloudflare Worker: prefer the configured
+    // apiBase, then the current origin if served by the Worker, else the domain.
+    const base = API_BASE || (REMOTE ? location.origin : "https://borealissoftwares.com");
+    return `<!-- Borealis Softwares analytics — ${p.name} -->
 <script>
 (function(){
-  var SITE_ID = "${p.id}"; // ${p.name}
-  // Sends a pageview to your Borealis dashboard.
+  var SITE_ID = "${p.id}";
   var img = new Image();
-  img.src = "${origin}collect?site=" + SITE_ID +
+  img.src = "${base}/collect?site=" + SITE_ID +
             "&path=" + encodeURIComponent(location.pathname) +
             "&t=" + Date.now();
 })();
@@ -463,14 +617,33 @@
     $("#brandHome").addEventListener("click", () => { if (currentId) closeDetail(); });
     $("#deleteProjectBtn").addEventListener("click", () => deleteProject(currentId));
 
-    $("#noteForm").addEventListener("submit", (e) => {
+    $("#noteForm").addEventListener("submit", async (e) => {
       e.preventDefault();
       const text = $("#noteInput").value.trim();
       if (!text) return;
       const p = state.projects.find((x) => x.id === currentId);
-      p.notes.push({ id: uid(), text, ts: Date.now() });
-      save(); $("#noteInput").value = ""; renderNotes(p); toast("Note added");
+      try {
+        let note;
+        if (REMOTE) {
+          const res = await api("/api/sites/" + p.id + "/notes", { method: "POST", body: JSON.stringify({ text }) });
+          note = res.note;
+        } else {
+          note = { id: uid(), text, ts: Date.now() };
+        }
+        p.notes.push(note);
+        save(); $("#noteInput").value = ""; renderNotes(p); toast("Note added");
+      } catch (err) { toast(err.status === 401 ? "Session expired — please unlock" : "Could not add note"); if (err.status === 401) logout(); }
     });
+
+    // login / logout
+    const loginForm = $("#loginForm");
+    if (loginForm) loginForm.addEventListener("submit", (e) => { e.preventDefault(); tryLogin($("#loginInput").value); });
+    const lockBtn = $("#lockBtn");
+    if (lockBtn) lockBtn.addEventListener("click", logout);
+
+    // public profile editor
+    const profForm = $("#profileForm");
+    if (profForm) profForm.addEventListener("submit", (e) => { e.preventDefault(); saveProfile(); });
 
     // range toggles
     $("#globalRange").addEventListener("click", (e) => {
@@ -522,8 +695,28 @@
     });
     window.addEventListener("resize", () => { currentId ? renderDetail() : renderDashboard(); });
 
+    // Mode-specific UI: live backend vs. local demo.
+    const chip = $("#modeChip");
+    if (REMOTE) {
+      chip.textContent = "● Live";
+      chip.classList.add("live");
+      chip.title = "Connected to your Cloudflare backend — tracking real pageviews";
+      const seed = document.querySelector("label.check");
+      if (seed) seed.style.display = "none"; // no fake data in live mode
+      $("#importBtn").style.display = "none"; // import can't push to the live DB
+      if (lockBtn) lockBtn.style.display = authRequired ? "" : "none";
+    } else {
+      chip.textContent = "● Local demo";
+      chip.title = "Running on demo data in this browser. Deploy the Worker for real tracking.";
+      if (lockBtn) lockBtn.style.display = "none";
+    }
+
     renderDashboard();
+    if (needLogin) showLogin();
   }
 
-  document.addEventListener("DOMContentLoaded", init);
+  document.addEventListener("DOMContentLoaded", async () => {
+    await bootstrap();
+    init();
+  });
 })();

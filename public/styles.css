@@ -6,9 +6,9 @@
   --border: rgba(120, 160, 220, 0.14);
   --text: #e7eefb;
   --muted: #8da2c4;
-  --accent: #2bd4a8;
-  --accent-2: #6f7bf7;
-  --accent-3: #7c4dff;
+  --accent: #34c8a3;
+  --accent-2: #2f8fd0;
+  --accent-3: #8a4dff;
   --danger: #fb7185;
   --good: #34d399;
   --shadow: 0 18px 50px rgba(0, 0, 0, 0.45);
@@ -38,9 +38,9 @@ body {
   border-radius: 50%;
   animation: drift 22s ease-in-out infinite alternate;
 }
-.a1 { top: -20%; left: -10%; background: radial-gradient(circle, #2bd4a8, transparent 65%); }
-.a2 { top: -25%; right: -5%; background: radial-gradient(circle, #3b6fe0, transparent 65%); animation-delay: -7s; }
-.a3 { top: -30%; left: 35%; background: radial-gradient(circle, #7c4dff, transparent 65%); animation-delay: -13s; }
+.a1 { top: -20%; left: -10%; background: radial-gradient(circle, #34c8a3, transparent 65%); }
+.a2 { top: -25%; right: -5%; background: radial-gradient(circle, #2f8fd0, transparent 65%); animation-delay: -7s; }
+.a3 { top: -30%; left: 35%; background: radial-gradient(circle, #8a4dff, transparent 65%); animation-delay: -13s; }
 @keyframes drift {
   0% { transform: translate(0,0) scale(1); }
   100% { transform: translate(6%, 10%) scale(1.15); }
@@ -57,18 +57,22 @@ body {
 }
 .brand { display: flex; align-items: center; gap: 11px; cursor: pointer; user-select: none; }
 .brand-mark {
-  width: 46px; height: 24px; display: block; flex: none;
-  filter: drop-shadow(0 0 10px rgba(43, 212, 168, 0.45));
+  width: 46px; height: auto; display: block; flex: none;
+  filter: drop-shadow(0 0 10px rgba(52, 200, 163, 0.35));
 }
 .brand-text strong { display: block; font-size: 16px; letter-spacing: 0.2px; }
 .brand-text small { color: var(--muted); font-size: 12px; }
 .topbar-actions { display: flex; gap: 10px; align-items: center; }
+.mode-chip { font-size: 12px; font-weight: 600; color: var(--muted); padding: 4px 10px; border-radius: 20px; border: 1px solid var(--border); white-space: nowrap; }
+.mode-chip.live { color: var(--good); border-color: rgba(52,216,180,0.35); background: rgba(52,216,180,0.08); }
+@media (max-width: 640px) { .mode-chip { display: none; } }
 
 /* Buttons */
 .btn {
   font: inherit; font-weight: 600; font-size: 14px;
   border: 1px solid transparent; border-radius: 10px;
   padding: 9px 16px; cursor: pointer; color: var(--text);
+  text-decoration: none; display: inline-block;
   transition: transform .08s ease, background .2s ease, border-color .2s ease;
 }
 .btn:active { transform: translateY(1px); }
@@ -92,7 +96,7 @@ h2 { font-size: 16px; margin: 0; }
 /* Range toggle */
 .range-toggle { display: inline-flex; background: rgba(255,255,255,0.04); border: 1px solid var(--border); border-radius: 10px; padding: 3px; }
 .range-toggle button { font: inherit; font-weight: 600; font-size: 13px; color: var(--muted); background: transparent; border: 0; padding: 6px 14px; border-radius: 8px; cursor: pointer; }
-.range-toggle button.active { background: rgba(43,212,168,0.16); color: var(--accent); }
+.range-toggle button.active { background: rgba(52,200,163,0.16); color: var(--accent); }
 
 /* Stat grid */
 .stat-grid { display: grid; grid-template-columns: repeat(4, 1fr); gap: 14px; margin-bottom: 22px; }
@@ -141,7 +145,7 @@ h2 { font-size: 16px; margin: 0; }
 
 /* Empty state */
 .empty-state { text-align: center; padding: 60px 20px; }
-.empty-mark { width: 120px; height: 64px; display: block; margin: 0 auto 8px; filter: drop-shadow(0 0 16px rgba(43,212,168,0.4)); }
+.empty-mark { width: 150px; height: auto; display: block; margin: 0 auto 14px; opacity: 0.9; filter: drop-shadow(0 0 16px rgba(52,200,163,0.3)); }
 .empty-state h3 { margin: 6px 0; }
 .empty-state .btn { margin-top: 16px; }
 
@@ -181,6 +185,21 @@ h2 { font-size: 16px; margin: 0; }
 .toppages .bar { height: 6px; border-radius: 4px; background: linear-gradient(90deg, var(--accent), var(--accent-2)); }
 .toppages .hits { font-size: 12px; color: var(--muted); width: 52px; text-align: right; }
 
+/* Public profile editor */
+.public-badge { font-size: 11px; font-weight: 700; padding: 3px 10px; border-radius: 20px; color: var(--muted); border: 1px solid var(--border); align-self: center; }
+.public-badge.on { color: var(--good); border-color: rgba(52,216,180,0.4); background: rgba(52,216,180,0.1); }
+.profile-form .field-row { display: grid; grid-template-columns: 1fr 1fr; gap: 14px; }
+.profile-form label { display: block; font-size: 13px; font-weight: 600; color: var(--muted); margin-bottom: 12px; }
+.profile-form label small { font-weight: 500; opacity: 0.8; }
+.profile-form input[type=text], .profile-form textarea {
+  display: block; width: 100%; margin-top: 6px; font: inherit; font-size: 14px; color: var(--text);
+  background: rgba(255,255,255,0.05); border: 1px solid var(--border); border-radius: 10px; padding: 10px 12px; resize: vertical;
+}
+.profile-form input:focus, .profile-form textarea:focus { outline: none; border-color: var(--accent); }
+.switch-row { display: flex; align-items: center; gap: 10px; font-weight: 500 !important; color: var(--text) !important; margin-bottom: 16px !important; }
+.switch-row input { width: auto; }
+@media (max-width: 640px) { .profile-form .field-row { grid-template-columns: 1fr; } }
+
 /* Modal */
 .modal-backdrop {
   position: fixed; inset: 0; z-index: 40; background: rgba(4, 8, 16, 0.66);
@@ -193,7 +212,7 @@ h2 { font-size: 16px; margin: 0; }
 @keyframes pop { from { transform: scale(.96); opacity: 0; } to { transform: none; opacity: 1; } }
 .modal h2 { margin: 0 0 16px; font-size: 19px; }
 .modal label { display: block; font-size: 13px; font-weight: 600; margin-bottom: 14px; color: var(--muted); }
-.modal label input[type=text], .modal label input[type=color] {
+.modal label input[type=text], .modal label input[type=password], .modal label input[type=color] {
   display: block; width: 100%; margin-top: 6px; font: inherit; color: var(--text);
   background: rgba(255,255,255,0.05); border: 1px solid var(--border); border-radius: 10px; padding: 10px 12px;
 }
@@ -203,6 +222,11 @@ h2 { font-size: 16px; margin: 0; }
 .modal label.check input { width: auto; }
 .modal-actions { display: flex; justify-content: flex-end; gap: 10px; margin-top: 8px; }
 .snippet { background: #060a12; border: 1px solid var(--border); border-radius: 10px; padding: 14px; font-size: 12px; overflow-x: auto; color: #aee9dd; white-space: pre-wrap; word-break: break-all; }
+
+/* Login modal */
+.login-modal { text-align: center; max-width: 380px; }
+.login-mark { width: 120px; height: auto; margin: 0 auto 10px; display: block; }
+.login-modal label { text-align: left; }
 
 /* Toast */
 .toast {

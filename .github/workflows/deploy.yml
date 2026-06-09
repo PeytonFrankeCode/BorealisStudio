@@ -1,0 +1,33 @@
+name: Deploy to Cloudflare
+
+# Deploys the Worker (API + /collect beacon) and the static site in public/ to
+# Cloudflare, giving you real traffic tracking backed by D1.
+#
+# One-time setup before this works:
+#   1. wrangler d1 create borealis_traffic   -> paste database_id into wrangler.toml
+#   2. wrangler d1 execute borealis_traffic --remote --file schema.sql
+#   3. In the repo: Settings -> Secrets and variables -> Actions, add:
+#        CLOUDFLARE_API_TOKEN  (a token with "Edit Cloudflare Workers" permission)
+#        CLOUDFLARE_ACCOUNT_ID (your Cloudflare account id)
+#   4. After the first deploy, set the dashboard password once from your machine:
+#        wrangler secret put ADMIN_TOKEN
+
+on:
+  push:
+    branches: [main, claude/borealis-traffic-tracker-CJQAR]
+  workflow_dispatch:
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    # Only run if the Cloudflare credentials are configured.
+    if: ${{ vars.ENABLE_CLOUDFLARE_DEPLOY == 'true' }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Deploy with Wrangler
+        uses: cloudflare/wrangler-action@v3
+        with:
+          apiToken: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          accountId: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}

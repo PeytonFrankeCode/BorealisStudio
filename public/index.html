@@ -1,0 +1,115 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Borealis Softwares — Software studio for ambitious products</title>
+  <meta name="description" content="Borealis Softwares is a software studio that designs, builds, and ships fast, beautiful web apps and digital products." />
+  <meta property="og:title" content="Borealis Softwares" />
+  <meta property="og:description" content="Software studio for ambitious products. We design, build, and ship." />
+  <meta property="og:type" content="website" />
+  <meta property="og:url" content="https://borealissoftwares.com/" />
+  <link rel="canonical" href="https://borealissoftwares.com/" />
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&display=swap" rel="stylesheet" />
+  <link rel="icon" href="logo.svg" />
+  <link rel="stylesheet" href="landing.css" />
+</head>
+<body>
+  <div class="aurora-bg" aria-hidden="true">
+    <span class="aurora a1"></span>
+    <span class="aurora a2"></span>
+    <span class="aurora a3"></span>
+  </div>
+
+  <header class="nav">
+    <a class="brand" href="#top">
+      <img class="brand-mark" src="logo.svg" alt="Borealis Softwares logo" />
+      <span class="brand-name">Borealis<span class="brand-sub"> Softwares</span></span>
+    </a>
+    <nav class="nav-links">
+      <a href="#work">Work</a>
+      <a href="#services">Services</a>
+      <a href="#contact">Contact</a>
+      <a class="nav-cta" href="#contact">Start a project</a>
+    </nav>
+  </header>
+
+  <main id="top">
+    <!-- Hero -->
+    <section class="hero">
+      <p class="eyebrow">BOREALIS SOFTWARES</p>
+      <h1>Software studio for<br /><span class="grad">ambitious products.</span></h1>
+      <p class="lede">We design, build, and ship fast, beautiful web apps — from the first
+        sketch to launch and everything after. These are the projects we’re building.</p>
+      <div class="hero-actions">
+        <a class="btn primary" href="#work">See our work</a>
+        <a class="btn ghost" href="#contact">Start a project</a>
+      </div>
+    </section>
+
+    <!-- Projects -->
+    <section id="work" class="section">
+      <div class="section-head">
+        <h2>Selected work</h2>
+        <p class="muted">Live products and sites from the studio.</p>
+      </div>
+      <div class="work-grid" id="workGrid">
+        <div class="loading" id="workLoading">Loading projects…</div>
+      </div>
+      <div class="work-empty" id="workEmpty" hidden>
+        <p class="muted">New projects are on the way — check back soon.</p>
+      </div>
+    </section>
+
+    <!-- Services -->
+    <section id="services" class="section">
+      <div class="section-head">
+        <h2>What we do</h2>
+        <p class="muted">End-to-end product work, handled by one team.</p>
+      </div>
+      <div class="cards">
+        <article class="card">
+          <span class="card-ic">◆</span>
+          <h3>Web &amp; product</h3>
+          <p>Marketing sites, dashboards, and full web apps built to be fast, accessible, and easy to grow.</p>
+        </article>
+        <article class="card">
+          <span class="card-ic">✦</span>
+          <h3>Design &amp; brand</h3>
+          <p>Identity, UI systems, and polished interfaces that make a product feel considered and premium.</p>
+        </article>
+        <article class="card">
+          <span class="card-ic">▲</span>
+          <h3>Analytics &amp; growth</h3>
+          <p>First-party, privacy-friendly tracking and insight so you actually know what’s working.</p>
+        </article>
+      </div>
+    </section>
+
+    <!-- Contact -->
+    <section id="contact" class="section contact">
+      <div class="contact-inner">
+        <h2>Have something in mind?</h2>
+        <p class="muted">Tell us about your product and we’ll get back to you.</p>
+        <a class="btn primary big" href="mailto:hello@borealissoftwares.com">hello@borealissoftwares.com</a>
+      </div>
+    </section>
+  </main>
+
+  <footer class="footer">
+    <div class="footer-brand">
+      <img class="brand-mark" src="logo.svg" alt="" />
+      <span>Borealis Softwares</span>
+    </div>
+    <div class="footer-meta">
+      <span>© <span id="year"></span> Borealis Softwares</span>
+      <a href="dashboard.html">Dashboard</a>
+    </div>
+  </footer>
+
+  <script src="config.js"></script>
+  <script src="landing.js"></script>
+</body>
+</html>
