@@ -1,4 +1,7 @@
-name = "borealis-softwares"
+# Worker name must match the Worker in your Cloudflare dashboard (the one that
+# has borealissoftwares.com attached). Cloudflare auto-named it "borealisstudio"
+# from the repo, so we use that here.
+name = "borealisstudio"
 main = "worker/index.js"
 compatibility_date = "2025-01-01"
 
@@ -7,13 +10,15 @@ compatibility_date = "2025-01-01"
 directory = "./public"
 binding = "ASSETS"
 
-# D1 database. After `wrangler d1 create borealis_traffic`, paste the
-# returned database_id below.
+# D1 database binding. Because the build runs `wrangler deploy`, the binding must
+# live here (a dashboard-only binding would be removed on deploy). Paste your
+# database's ID below — find it at Workers & Pages -> D1 SQL Database ->
+# borealis_traffic -> "Database ID" (it is an identifier, not a secret).
 [[d1_databases]]
 binding = "DB"
 database_name = "borealis_traffic"
-database_id = "REPLACE_WITH_YOUR_D1_DATABASE_ID"
+database_id = "PASTE_YOUR_DATABASE_ID_HERE"
 
-# The dashboard password is stored as a secret, NOT here. Set it with:
-#   wrangler secret put ADMIN_TOKEN
-# When ADMIN_TOKEN is set, /api admin routes and the dashboard require it.
+# The dashboard password is a dashboard secret, not in this file:
+#   Settings -> Variables and Secrets -> add secret ADMIN_TOKEN
+# When ADMIN_TOKEN is set, the /api admin routes and the dashboard require it.
