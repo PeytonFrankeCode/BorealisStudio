@@ -1,4 +1,4 @@
-/* Borealis Softwares — traffic tracker + public projects API
+/* Borealis Software — traffic tracker + public projects API
  * Cloudflare Workers + D1.
  *
  * Public (no auth):

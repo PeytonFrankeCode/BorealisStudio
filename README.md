@@ -1,6 +1,6 @@
-# Borealis Softwares
+# Borealis Software
 
-The public site for **Borealis Softwares** (borealissoftwares.com) plus a
+The public site for **Borealis Software** (borealissoftwares.com) plus a
 private traffic dashboard, on one Cloudflare Worker + D1 backend.
 
 > **Setting this up?** Follow **[SETUP.md](SETUP.md)** — a step-by-step,

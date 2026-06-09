@@ -1,4 +1,4 @@
-/* Borealis Softwares — Traffic Dashboard
+/* Borealis Software — Traffic Dashboard
  * Zero-dependency dashboard. Talks to the Cloudflare Worker + D1 backend when
  * served by it (with password auth); falls back to a local demo otherwise.
  */
@@ -9,7 +9,7 @@
   const TOKEN_KEY = "borealis.admin.token";
   const DAY = 86400000;
 
-  /* ---------- Palette (from the Borealis Softwares aurora logo) ---------- */
+  /* ---------- Palette (from the Borealis Software aurora logo) ---------- */
   const C = {
     visitors: "#34c8a3", // teal-green
     views: "#6f7bf7",    // indigo
@@ -125,7 +125,7 @@
   /* --------------------------- Seed data --------------------------- */
   function seedProjects() {
     const presets = [
-      { name: "Borealis Softwares", domain: "borealissoftwares.com", color: "#34c8a3", base: 320, growth: 1.2,
+      { name: "Borealis Software", domain: "borealissoftwares.com", color: "#34c8a3", base: 320, growth: 1.2,
         description: "Studio site and home base for everything we build.", tags: "Brand, Web", public: true },
       { name: "Aurora Portfolio", domain: "aurora.design", color: "#2f8fd0", base: 140, growth: 0.6,
         description: "A clean portfolio template for creative freelancers.", tags: "Next.js, Design", public: true },
@@ -142,7 +142,7 @@
       public: p.public,
       color: p.color,
       created: Date.now(),
-      notes: p.name === "Borealis Softwares"
+      notes: p.name === "Borealis Software"
         ? [{ id: uid(), text: "Launched the new landing page — watching bounce rate this week.", ts: Date.now() - 2 * DAY }]
         : [],
       traffic: genTraffic(120, p.base, p.growth),
@@ -577,7 +577,7 @@
     // The /collect beacon must hit the Cloudflare Worker: prefer the configured
     // apiBase, then the current origin if served by the Worker, else the domain.
     const base = API_BASE || (REMOTE ? location.origin : "https://borealissoftwares.com");
-    return `<!-- Borealis Softwares analytics — ${p.name} -->
+    return `<!-- Borealis Software analytics — ${p.name} -->
 <script>
 (function(){
   var SITE_ID = "${p.id}";
