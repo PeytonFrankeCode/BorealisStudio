@@ -8,6 +8,7 @@
   // Projects that always appear on the landing page, ahead of the live feed.
   var FEATURED = [
     { name: "The Card Huddle", logo: "cardhuddle.png",
+      url: "https://thecardhuddle.com", domain: "thecardhuddle.com",
       description: "Find. Collect. Track. A home for sports card collectors to browse cards and keep tabs on their collection.",
       tags: ["Sports cards", "Web app"], color: "#2e8b57" },
   ];
