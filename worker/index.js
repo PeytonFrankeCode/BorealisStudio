@@ -92,11 +92,12 @@ async function collect(request, env, url, cors) {
       const path = clip(url.searchParams.get("path") || "/", 512);
       const ip = request.headers.get("cf-connecting-ip") || "0";
       const ua = request.headers.get("user-agent") || "";
+      const country = clip(((request.cf && request.cf.country) || ""), 2).toUpperCase();
       const day = new Date().toISOString().slice(0, 10);
       const visitor = await sha256(`${site}|${day}|${ip}|${ua}`);
       await env.DB.prepare(
-        "INSERT INTO events (site_id, day, path, visitor, ts) VALUES (?,?,?,?,?)"
-      ).bind(site, day, path, visitor, Date.now()).run();
+        "INSERT INTO events (site_id, day, path, visitor, country, ts) VALUES (?,?,?,?,?,?)"
+      ).bind(site, day, path, visitor, country, Date.now()).run();
     }
   }
   return new Response(PIXEL, {
@@ -158,7 +159,19 @@ async function overview(env, url, cors) {
       notes: notes.map((n) => ({ id: n.id, text: n.text, ts: n.ts })),
     });
   }
-  return json({ projects }, cors);
+
+  // Unique visitors per country per day, across all sites (for the world map).
+  // Visitor hashes are per site+day, so this matches how the overview stats
+  // sum daily uniques.
+  const geo = (await env.DB.prepare(
+    "SELECT day, country, COUNT(DISTINCT visitor) AS visitors FROM events " +
+    "WHERE day >= ? AND country != '' GROUP BY day, country"
+  ).bind(since).all()).results || [];
+
+  return json({
+    projects,
+    countries: geo.map((r) => ({ day: r.day, country: r.country, visitors: r.visitors })),
+  }, cors);
 }
 
 async function createSite(request, env, cors) {
@@ -232,7 +245,7 @@ async function ensureSchema(env) {
     env.DB.prepare(
       "CREATE TABLE IF NOT EXISTS events (id INTEGER PRIMARY KEY AUTOINCREMENT, " +
       "site_id TEXT NOT NULL, day TEXT NOT NULL, path TEXT NOT NULL DEFAULT '/', " +
-      "visitor TEXT NOT NULL, ts INTEGER NOT NULL)"
+      "visitor TEXT NOT NULL, country TEXT NOT NULL DEFAULT '', ts INTEGER NOT NULL)"
     ),
     env.DB.prepare("CREATE INDEX IF NOT EXISTS idx_events_site_day ON events (site_id, day)"),
     env.DB.prepare(
@@ -248,6 +261,8 @@ async function ensureSchema(env) {
   ]) {
     try { await env.DB.prepare("ALTER TABLE sites ADD COLUMN " + col).run(); } catch (e) { /* exists */ }
   }
+  // ...and for events recorded before country tracking existed.
+  try { await env.DB.prepare("ALTER TABLE events ADD COLUMN country TEXT NOT NULL DEFAULT ''").run(); } catch (e) { /* exists */ }
   schemaReady = true;
 }
 

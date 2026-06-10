@@ -63,6 +63,17 @@
         <canvas id="overviewChart" height="240"></canvas>
       </div>
 
+      <div class="panel chart-panel" id="geoPanel">
+        <div class="panel-head">
+          <h2>Visitors by country</h2>
+          <span class="muted" id="geoChip"></span>
+        </div>
+        <div class="geo-wrap">
+          <div class="world-map" id="worldMap" role="img" aria-label="World map of unique visitors by country"></div>
+          <ol class="geo-list" id="geoList"></ol>
+        </div>
+      </div>
+
       <div class="section-head">
         <h2>Your sites</h2>
         <span class="muted" id="projectCount"></span>
@@ -223,6 +234,7 @@
   <div class="toast" id="toast" hidden></div>
 
   <script src="config.js"></script>
+  <script src="worldmap.js"></script>
   <script src="app.js"></script>
 </body>
 </html>
