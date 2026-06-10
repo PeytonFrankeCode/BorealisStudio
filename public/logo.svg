@@ -1,18 +1,20 @@
-<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 200 140" fill="none">
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 200 110" fill="none">
   <defs>
-    <linearGradient id="bGrad" gradientUnits="userSpaceOnUse" x1="10" y1="125" x2="190" y2="10">
-      <stop offset="0" stop-color="#6cae8e"/>
-      <stop offset="0.4" stop-color="#4b7da6"/>
-      <stop offset="0.7" stop-color="#46699f"/>
-      <stop offset="1" stop-color="#7e5ec4"/>
+    <linearGradient id="bGrad" gradientUnits="userSpaceOnUse" x1="8" y1="100" x2="192" y2="8">
+      <stop offset="0" stop-color="#74b294"/>
+      <stop offset="0.38" stop-color="#4a7fa8"/>
+      <stop offset="0.68" stop-color="#46699f"/>
+      <stop offset="1" stop-color="#8a5fc8"/>
     </linearGradient>
   </defs>
-  <g stroke="url(#bGrad)" stroke-width="8" stroke-linecap="round" stroke-linejoin="round">
-    <!-- upper ribbon: from the tail, crests high, dips, rises toward the leaf -->
-    <path d="M14 120 C20 92 38 62 66 52 C94 42 102 80 126 82 C144 84 152 64 158 46"/>
-    <!-- lower ribbon: from the tail, stays low, weaves up across the upper one -->
-    <path d="M14 120 C34 100 58 84 86 86 C112 88 120 52 142 50 C152 49 161 52 167 59"/>
-    <!-- leaf tip at the upper right, outlined with a white interior -->
-    <path d="M158 46 C164 30 174 17 186 6 C190 26 184 50 170 64 C160 72 154 58 158 46 Z"/>
+  <g stroke="url(#bGrad)" stroke-width="7" stroke-linecap="round" stroke-linejoin="round">
+    <!-- upper ribbon: steep rise from the tail into a big rounded crest, dip, rise to the leaf -->
+    <path d="M8 98 C10 76 22 50 44 40 C66 30 84 38 98 52 C112 66 128 70 142 60 C150 54 156 46 160 38"/>
+    <!-- lower ribbon: from the tail, sweeps right under the crest, weaves up across -->
+    <path d="M8 98 C26 84 48 74 72 74 C96 74 108 46 130 42 C142 40 152 44 158 52"/>
+    <!-- leaf at the upper right: outline with white interior, pointed tip -->
+    <path d="M159 38 C165 22 176 9 188 2 C194 22 190 46 175 58 C164 66 154 52 159 38 Z"/>
+    <!-- inner vein of the leaf -->
+    <path d="M166 46 C172 34 179 21 185 11" stroke-width="4.5"/>
   </g>
 </svg>

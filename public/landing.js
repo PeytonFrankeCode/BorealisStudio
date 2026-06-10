@@ -7,9 +7,9 @@
 
   var SAMPLE = [
     { name: "Borealis Software", url: "https://borealissoftwares.com", domain: "borealissoftwares.com",
-      description: "Our studio home base — designed, built, and managed in-house.", tags: ["Brand", "Web"], color: "#34c8a3" },
+      description: "Our home on the web — the portfolio you're looking at right now.", tags: ["Brand", "Web"], color: "#34c8a3" },
     { name: "Aurora Portfolio", url: "https://aurora.design", domain: "aurora.design",
-      description: "A clean portfolio site we built and run ourselves.", tags: ["Next.js", "Design"], color: "#2f8fd0" },
+      description: "A clean, simple portfolio site for creative work.", tags: ["Next.js", "Design"], color: "#2f8fd0" },
   ];
 
   function esc(s) {
