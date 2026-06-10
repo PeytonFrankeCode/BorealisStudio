@@ -31,9 +31,13 @@
   function load() {
     try {
       const raw = localStorage.getItem(STORE_KEY);
-      if (raw) return JSON.parse(raw);
+      if (raw) {
+        const data = JSON.parse(raw);
+        if (!data.countries) data.countries = genCountryRows(); // older demo saves
+        return data;
+      }
     } catch (e) { /* ignore */ }
-    return { projects: seedProjects() };
+    return { projects: seedProjects(), countries: genCountryRows() };
   }
   function save() {
     if (REMOTE) return; // persistence lives in D1 on the backend
@@ -89,6 +93,7 @@
   async function reloadOverview() {
     const data = await api("/api/overview?days=90");
     state.projects = data.projects || [];
+    state.countries = data.countries || [];
   }
 
   async function tryLogin(pw) {
@@ -162,6 +167,22 @@
       const visitors = Math.max(3, Math.round(base * weekend * trend * noise));
       const views = Math.round(visitors * (1.8 + Math.random() * 1.4));
       out.push({ date, visitors, views });
+    }
+    return out;
+  }
+
+  // Demo rows shaped like the Worker's countries feed: {day, country, visitors}.
+  function genCountryRows() {
+    const weights = { US: 34, CA: 9, GB: 8, IN: 7, DE: 6, AU: 5, FR: 4, BR: 4, NL: 3, JP: 3, SE: 2, MX: 2, ES: 2, PL: 1 };
+    const out = [];
+    const today = new Date();
+    today.setUTCHours(0, 0, 0, 0);
+    for (let i = 89; i >= 0; i--) {
+      const day = new Date(today.getTime() - i * DAY).toISOString().slice(0, 10);
+      Object.keys(weights).forEach((c) => {
+        const v = Math.round(weights[c] * (0.5 + Math.random()));
+        if (v > 0) out.push({ day, country: c, visitors: v });
+      });
     }
     return out;
   }
@@ -351,12 +372,16 @@
       ], { labels: dayLabels(combined) });
     }
 
+    // world map
+    renderGeo();
+
     // project cards
     const pg = $("#projectGrid");
     pg.innerHTML = "";
     ps.forEach((p) => pg.appendChild(projectCard(p)));
     $("#emptyState").hidden = ps.length !== 0;
     $(".chart-panel").style.display = ps.length ? "" : "none";
+    $("#geoPanel").style.display = ps.length ? "" : "none";
     $(".section-head").style.display = ps.length ? "" : "none";
     $("#statGrid").style.display = ps.length ? "" : "none";
 
@@ -366,6 +391,81 @@
         const c = document.getElementById("spark-" + p.id);
         if (c) drawSpark(c, lastN(p.traffic, globalDays).map((r) => r.visitors), p.color);
       });
+    });
+  }
+
+  /* ----------------------- Visitors by country ---------------------- */
+  let geoSvgReady = false;
+
+  function countryName(code, fallback) {
+    try {
+      return new Intl.DisplayNames(["en"], { type: "region" }).of(code) || fallback || code;
+    } catch (e) { return fallback || code; }
+  }
+
+  // Sum unique daily visitors per country over the selected range.
+  function geoTotals(days) {
+    const cutoff = new Date(Date.now() - (days - 1) * DAY).toISOString().slice(0, 10);
+    const totals = {};
+    (state.countries || []).forEach((r) => {
+      if (r.day >= cutoff && r.country) totals[r.country] = (totals[r.country] || 0) + r.visitors;
+    });
+    return totals;
+  }
+
+  function buildGeoSvg() {
+    const host = $("#worldMap");
+    if (!host || geoSvgReady || !window.WORLD_MAP) return;
+    const MAP = window.WORLD_MAP;
+    const svg = document.createElementNS("http://www.w3.org/2000/svg", "svg");
+    svg.setAttribute("viewBox", "0 0 " + MAP.w + " " + MAP.h);
+    MAP.countries.forEach((c) => {
+      const p = document.createElementNS("http://www.w3.org/2000/svg", "path");
+      p.setAttribute("d", c.d);
+      p.dataset.code = c.c;
+      p.appendChild(document.createElementNS("http://www.w3.org/2000/svg", "title"));
+      svg.appendChild(p);
+    });
+    host.appendChild(svg);
+    geoSvgReady = true;
+  }
+
+  function renderGeo() {
+    const host = $("#worldMap");
+    if (!host) return;
+    buildGeoSvg();
+    const totals = geoTotals(globalDays);
+    const entries = Object.entries(totals).sort((a, b) => b[1] - a[1]);
+    const max = entries.length ? entries[0][1] : 0;
+    const total = entries.reduce((a, e) => a + e[1], 0);
+    $("#geoChip").textContent = entries.length
+      ? fmt(total) + " unique visitors · " + entries.length + (entries.length === 1 ? " country" : " countries") + " · last " + globalDays + "d"
+      : "";
+
+    host.querySelectorAll("path").forEach((p) => {
+      const v = totals[p.dataset.code] || 0;
+      const t = max ? Math.sqrt(v / max) : 0; // sqrt keeps small counts visible
+      p.style.fill = v
+        ? "rgba(52, 200, 163, " + (0.18 + 0.72 * t).toFixed(3) + ")"
+        : "rgba(120, 160, 220, 0.08)";
+      p.querySelector("title").textContent =
+        countryName(p.dataset.code) + ": " + (v ? fmt(v) + " visitor" + (v === 1 ? "" : "s") : "no visitors");
+    });
+
+    const list = $("#geoList");
+    list.innerHTML = "";
+    if (!entries.length) {
+      list.appendChild(el("li", "note-empty",
+        "No location data yet — countries are recorded with each new visit."));
+      return;
+    }
+    entries.slice(0, 8).forEach(([code, v]) => {
+      const li = el("li");
+      const barW = Math.round((v / max) * 78);
+      li.innerHTML = '<span class="path">' + escapeHtml(countryName(code)) + '</span>' +
+        '<span class="bar" style="width:' + barW + 'px"></span>' +
+        '<span class="hits">' + fmt(v) + "</span>";
+      list.appendChild(li);
     });
   }
 

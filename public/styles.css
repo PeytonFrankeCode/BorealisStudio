@@ -185,6 +185,19 @@ h2 { font-size: 16px; margin: 0; }
 .toppages .bar { height: 6px; border-radius: 4px; background: linear-gradient(90deg, var(--accent), var(--accent-2)); }
 .toppages .hits { font-size: 12px; color: var(--muted); width: 52px; text-align: right; }
 
+/* Visitors by country (world map) */
+.geo-wrap { display: grid; grid-template-columns: 1fr 252px; gap: 24px; align-items: center; }
+.world-map svg { width: 100%; height: auto; display: block; }
+.world-map path { stroke: rgba(120,160,220,0.18); stroke-width: 0.5; transition: fill .25s ease; }
+.world-map path:hover { stroke: var(--accent); stroke-width: 1.2; }
+.geo-list { list-style: none; padding: 0; margin: 0; display: flex; flex-direction: column; gap: 4px; }
+.geo-list li { display: flex; align-items: center; gap: 10px; padding: 7px 4px; border-bottom: 1px solid var(--border); }
+.geo-list li:last-child { border-bottom: 0; }
+.geo-list .path { font-size: 13px; flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.geo-list .bar { height: 6px; border-radius: 4px; background: linear-gradient(90deg, var(--accent), var(--accent-2)); flex: none; }
+.geo-list .hits { font-size: 12px; color: var(--muted); width: 44px; text-align: right; flex: none; }
+@media (max-width: 880px) { .geo-wrap { grid-template-columns: 1fr; } }
+
 /* Public profile editor */
 .public-badge { font-size: 11px; font-weight: 700; padding: 3px 10px; border-radius: 20px; color: var(--muted); border: 1px solid var(--border); align-self: center; }
 .public-badge.on { color: var(--good); border-color: rgba(52,216,180,0.4); background: rgba(52,216,180,0.1); }
