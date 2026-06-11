@@ -34,10 +34,11 @@
       if (raw) {
         const data = JSON.parse(raw);
         if (!data.countries) data.countries = genCountryRows(); // older demo saves
+        if (!data.cities) data.cities = genCityRows();
         return data;
       }
     } catch (e) { /* ignore */ }
-    return { projects: seedProjects(), countries: genCountryRows() };
+    return { projects: seedProjects(), countries: genCountryRows(), cities: genCityRows() };
   }
   function save() {
     if (REMOTE) return; // persistence lives in D1 on the backend
@@ -94,6 +95,7 @@
     const data = await api("/api/overview?days=90");
     state.projects = data.projects || [];
     state.countries = data.countries || [];
+    state.cities = data.cities || [];
   }
 
   async function tryLogin(pw) {
@@ -182,6 +184,37 @@
       Object.keys(weights).forEach((c) => {
         const v = Math.round(weights[c] * (0.5 + Math.random()));
         if (v > 0) out.push({ day, country: c, visitors: v });
+      });
+    }
+    return out;
+  }
+
+  // Demo rows shaped like the Worker's cities feed: {day, country, city, lat, lon, visitors}.
+  function genCityRows() {
+    const cities = [
+      { country: "US", city: "New York", lat: 40.7, lon: -74.0, w: 12 },
+      { country: "US", city: "Los Angeles", lat: 34.1, lon: -118.2, w: 8 },
+      { country: "US", city: "Chicago", lat: 41.9, lon: -87.6, w: 6 },
+      { country: "US", city: "Austin", lat: 30.3, lon: -97.7, w: 4 },
+      { country: "CA", city: "Toronto", lat: 43.7, lon: -79.4, w: 6 },
+      { country: "CA", city: "Vancouver", lat: 49.3, lon: -123.1, w: 3 },
+      { country: "GB", city: "London", lat: 51.5, lon: -0.1, w: 7 },
+      { country: "IN", city: "Mumbai", lat: 19.1, lon: 72.9, w: 5 },
+      { country: "DE", city: "Berlin", lat: 52.5, lon: 13.4, w: 4 },
+      { country: "AU", city: "Sydney", lat: -33.9, lon: 151.2, w: 4 },
+      { country: "FR", city: "Paris", lat: 48.9, lon: 2.4, w: 3 },
+      { country: "BR", city: "São Paulo", lat: -23.6, lon: -46.6, w: 3 },
+      { country: "NL", city: "Amsterdam", lat: 52.4, lon: 4.9, w: 2 },
+      { country: "JP", city: "Tokyo", lat: 35.7, lon: 139.7, w: 2 },
+    ];
+    const out = [];
+    const today = new Date();
+    today.setUTCHours(0, 0, 0, 0);
+    for (let i = 89; i >= 0; i--) {
+      const day = new Date(today.getTime() - i * DAY).toISOString().slice(0, 10);
+      cities.forEach((c) => {
+        const v = Math.round(c.w * (0.4 + Math.random()));
+        if (v > 0) out.push({ day, country: c.country, city: c.city, lat: c.lat, lon: c.lon, visitors: v });
       });
     }
     return out;
@@ -413,6 +446,29 @@
     return totals;
   }
 
+  // Sum unique daily visitors per city over the selected range.
+  function geoCityTotals(days) {
+    const cutoff = new Date(Date.now() - (days - 1) * DAY).toISOString().slice(0, 10);
+    const byKey = {};
+    (state.cities || []).forEach((r) => {
+      if (r.day < cutoff || !r.city) return;
+      const key = r.city + "|" + r.country;
+      const c = byKey[key] || (byKey[key] = { city: r.city, country: r.country, lat: r.lat, lon: r.lon, visitors: 0 });
+      c.visitors += r.visitors;
+    });
+    return Object.values(byKey).sort((a, b) => b.visitors - a.visitors);
+  }
+
+  // Natural Earth projection (same as the generated map), lat/lon in degrees.
+  function projectPoint(lon, lat) {
+    const MAP = window.WORLD_MAP;
+    const la = (lat * Math.PI) / 180, lo = (lon * Math.PI) / 180;
+    const p2 = la * la, p4 = p2 * p2;
+    const x = lo * (0.8707 - 0.131979 * p2 + p4 * (-0.013791 + p4 * (0.003971 * p2 - 0.001529 * p4)));
+    const y = la * (1.007226 + p2 * (0.015085 + p4 * (-0.044475 + 0.028874 * p2 - 0.005916 * p4)));
+    return [MAP.tx + MAP.k * x, MAP.ty - MAP.k * y];
+  }
+
   function buildGeoSvg() {
     const host = $("#worldMap");
     if (!host || geoSvgReady || !window.WORLD_MAP) return;
@@ -426,6 +482,9 @@
       p.appendChild(document.createElementNS("http://www.w3.org/2000/svg", "title"));
       svg.appendChild(p);
     });
+    const bubbles = document.createElementNS("http://www.w3.org/2000/svg", "g");
+    bubbles.setAttribute("id", "geoBubbles");
+    svg.appendChild(bubbles);
     host.appendChild(svg);
     geoSvgReady = true;
   }
@@ -438,31 +497,60 @@
     const entries = Object.entries(totals).sort((a, b) => b[1] - a[1]);
     const max = entries.length ? entries[0][1] : 0;
     const total = entries.reduce((a, e) => a + e[1], 0);
+    const cities = geoCityTotals(globalDays);
     $("#geoChip").textContent = entries.length
-      ? fmt(total) + " unique visitors · " + entries.length + (entries.length === 1 ? " country" : " countries") + " · last " + globalDays + "d"
+      ? fmt(total) + " unique visitors · " +
+        (cities.length ? cities.length + (cities.length === 1 ? " city" : " cities") + " · " : "") +
+        entries.length + (entries.length === 1 ? " country" : " countries") + " · last " + globalDays + "d"
       : "";
 
     host.querySelectorAll("path").forEach((p) => {
       const v = totals[p.dataset.code] || 0;
       const t = max ? Math.sqrt(v / max) : 0; // sqrt keeps small counts visible
       p.style.fill = v
-        ? "rgba(52, 200, 163, " + (0.18 + 0.72 * t).toFixed(3) + ")"
+        ? "rgba(52, 200, 163, " + (0.14 + 0.5 * t).toFixed(3) + ")"
         : "rgba(120, 160, 220, 0.08)";
       p.querySelector("title").textContent =
         countryName(p.dataset.code) + ": " + (v ? fmt(v) + " visitor" + (v === 1 ? "" : "s") : "no visitors");
     });
 
+    // city bubbles (top 60, biggest first so small ones stay hoverable on top)
+    const bubbles = host.querySelector("#geoBubbles");
+    if (bubbles && window.WORLD_MAP) {
+      bubbles.innerHTML = "";
+      const cmax = cities.length ? cities[0].visitors : 0;
+      cities.slice(0, 60).forEach((c) => {
+        if (c.lat == null || c.lon == null) return;
+        const [x, y] = projectPoint(c.lon, c.lat);
+        const dot = document.createElementNS("http://www.w3.org/2000/svg", "circle");
+        dot.setAttribute("cx", x.toFixed(1));
+        dot.setAttribute("cy", y.toFixed(1));
+        dot.setAttribute("r", (3 + 9 * Math.sqrt(c.visitors / cmax)).toFixed(1));
+        dot.setAttribute("class", "geo-dot");
+        const t = document.createElementNS("http://www.w3.org/2000/svg", "title");
+        t.textContent = c.city + ", " + countryName(c.country) + ": " +
+          fmt(c.visitors) + " visitor" + (c.visitors === 1 ? "" : "s");
+        dot.appendChild(t);
+        bubbles.appendChild(dot);
+      });
+    }
+
+    // top list: cities when we have them, otherwise countries
     const list = $("#geoList");
     list.innerHTML = "";
     if (!entries.length) {
       list.appendChild(el("li", "note-empty",
-        "No location data yet — countries are recorded with each new visit."));
+        "No location data yet — locations are recorded with each new visit."));
       return;
     }
-    entries.slice(0, 8).forEach(([code, v]) => {
+    const rows = cities.length
+      ? cities.slice(0, 8).map((c) => [c.city, c.visitors])
+      : entries.slice(0, 8).map(([code, v]) => [countryName(code), v]);
+    const rmax = rows[0][1];
+    rows.forEach(([label, v]) => {
       const li = el("li");
-      const barW = Math.round((v / max) * 78);
-      li.innerHTML = '<span class="path">' + escapeHtml(countryName(code)) + '</span>' +
+      const barW = Math.round((v / rmax) * 78);
+      li.innerHTML = '<span class="path">' + escapeHtml(label) + '</span>' +
         '<span class="bar" style="width:' + barW + 'px"></span>' +
         '<span class="hits">' + fmt(v) + "</span>";
       list.appendChild(li);

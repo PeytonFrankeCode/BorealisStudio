@@ -27,6 +27,23 @@ const PIXEL = Uint8Array.from([
 
 let schemaReady = false;
 
+// Known crawler/tool user-agents. Real browsers never match these.
+const BOT_UA = new RegExp(
+  "bot|crawl|spider|slurp|preview|scan|probe|fetch|monitor|audit|lighthouse|" +
+  "headless|phantom|selenium|playwright|puppeteer|curl|wget|python|java/|" +
+  "go-http|node-fetch|axios|libwww|httpclient|okhttp|pingdom|uptime|ahrefs|" +
+  "semrush|mj12|dotbot|petalbot|bytespider|facebookexternalhit|whatsapp|" +
+  "telegrambot|discordbot|slackbot|twitterbot|linkedinbot|embedly|quora|" +
+  "pinterest|vkshare|w3c_validator", "i");
+
+function isBot(request) {
+  const ua = request.headers.get("user-agent") || "";
+  if (!ua || BOT_UA.test(ua)) return true;
+  // Cloudflare flags verified crawlers (search engines etc.) on all plans.
+  if (request.cf && request.cf.verifiedBotCategory) return true;
+  return false;
+}
+
 export default {
   async fetch(request, env) {
     const url = new URL(request.url);
@@ -86,18 +103,24 @@ function authed(request, env) {
 
 async function collect(request, env, url, cors) {
   const site = url.searchParams.get("site");
-  if (site) {
+  if (site && !isBot(request)) {
     const exists = await env.DB.prepare("SELECT 1 FROM sites WHERE id = ?").bind(site).first();
     if (exists) {
       const path = clip(url.searchParams.get("path") || "/", 512);
       const ip = request.headers.get("cf-connecting-ip") || "0";
       const ua = request.headers.get("user-agent") || "";
-      const country = clip(((request.cf && request.cf.country) || ""), 2).toUpperCase();
+      const cf = request.cf || {};
+      const country = clip(cf.country || "", 2).toUpperCase();
+      const city = clip(cf.city || "", 80);
+      // Coordinates come from Cloudflare's GeoIP (city-level). Rounded to
+      // 0.1 degrees (~11 km) so we never store anything close to a pinpoint.
+      const lat = cf.latitude != null ? Math.round(parseFloat(cf.latitude) * 10) / 10 : null;
+      const lon = cf.longitude != null ? Math.round(parseFloat(cf.longitude) * 10) / 10 : null;
       const day = new Date().toISOString().slice(0, 10);
       const visitor = await sha256(`${site}|${day}|${ip}|${ua}`);
       await env.DB.prepare(
-        "INSERT INTO events (site_id, day, path, visitor, country, ts) VALUES (?,?,?,?,?,?)"
-      ).bind(site, day, path, visitor, country, Date.now()).run();
+        "INSERT INTO events (site_id, day, path, visitor, country, city, lat, lon, ts) VALUES (?,?,?,?,?,?,?,?,?)"
+      ).bind(site, day, path, visitor, country, city, lat, lon, Date.now()).run();
     }
   }
   return new Response(PIXEL, {
@@ -168,9 +191,19 @@ async function overview(env, url, cors) {
     "WHERE day >= ? AND country != '' GROUP BY day, country"
   ).bind(since).all()).results || [];
 
+  // City-level detail (rounded coordinates) for the map's bubbles.
+  const cityRows = (await env.DB.prepare(
+    "SELECT day, country, city, lat, lon, COUNT(DISTINCT visitor) AS visitors FROM events " +
+    "WHERE day >= ? AND city != '' AND lat IS NOT NULL AND lon IS NOT NULL " +
+    "GROUP BY day, country, city, lat, lon"
+  ).bind(since).all()).results || [];
+
   return json({
     projects,
     countries: geo.map((r) => ({ day: r.day, country: r.country, visitors: r.visitors })),
+    cities: cityRows.map((r) => ({
+      day: r.day, country: r.country, city: r.city, lat: r.lat, lon: r.lon, visitors: r.visitors,
+    })),
   }, cors);
 }
 
@@ -245,7 +278,8 @@ async function ensureSchema(env) {
     env.DB.prepare(
       "CREATE TABLE IF NOT EXISTS events (id INTEGER PRIMARY KEY AUTOINCREMENT, " +
       "site_id TEXT NOT NULL, day TEXT NOT NULL, path TEXT NOT NULL DEFAULT '/', " +
-      "visitor TEXT NOT NULL, country TEXT NOT NULL DEFAULT '', ts INTEGER NOT NULL)"
+      "visitor TEXT NOT NULL, country TEXT NOT NULL DEFAULT '', " +
+      "city TEXT NOT NULL DEFAULT '', lat REAL, lon REAL, ts INTEGER NOT NULL)"
     ),
     env.DB.prepare("CREATE INDEX IF NOT EXISTS idx_events_site_day ON events (site_id, day)"),
     env.DB.prepare(
@@ -261,8 +295,10 @@ async function ensureSchema(env) {
   ]) {
     try { await env.DB.prepare("ALTER TABLE sites ADD COLUMN " + col).run(); } catch (e) { /* exists */ }
   }
-  // ...and for events recorded before country tracking existed.
-  try { await env.DB.prepare("ALTER TABLE events ADD COLUMN country TEXT NOT NULL DEFAULT ''").run(); } catch (e) { /* exists */ }
+  // ...and for events recorded before country/city tracking existed.
+  for (const col of ["country TEXT NOT NULL DEFAULT ''", "city TEXT NOT NULL DEFAULT ''", "lat REAL", "lon REAL"]) {
+    try { await env.DB.prepare("ALTER TABLE events ADD COLUMN " + col).run(); } catch (e) { /* exists */ }
+  }
   schemaReady = true;
 }
 
