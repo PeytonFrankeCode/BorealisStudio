@@ -18,6 +18,9 @@ CREATE TABLE IF NOT EXISTS events (
   path    TEXT NOT NULL DEFAULT '/',
   visitor TEXT NOT NULL,           -- daily per-visitor hash (ip+ua+day+site)
   country TEXT NOT NULL DEFAULT '', -- ISO 3166-1 alpha-2, from Cloudflare's request.cf
+  city    TEXT NOT NULL DEFAULT '', -- GeoIP city name, from Cloudflare's request.cf
+  lat     REAL,                     -- city coordinates rounded to 0.1 deg (~11 km)
+  lon     REAL,
   ts      INTEGER NOT NULL
 );
 CREATE INDEX IF NOT EXISTS idx_events_site_day ON events (site_id, day);
