@@ -281,7 +281,9 @@
     opts = opts || {};
     const dpr = window.devicePixelRatio || 1;
     const cssW = canvas.clientWidth || canvas.parentElement.clientWidth;
-    const cssH = canvas.getAttribute("height") * 1 || 240;
+    // Capture the intended height once; reading canvas.height back would compound
+    // the dpr scaling on every redraw and make the chart grow without bound.
+    const cssH = +(canvas.dataset.h || (canvas.dataset.h = canvas.getAttribute("height") || "240"));
     canvas.width = cssW * dpr; canvas.height = cssH * dpr;
     canvas.style.height = cssH + "px";
     const ctx = canvas.getContext("2d");
