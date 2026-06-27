@@ -17,8 +17,6 @@
  * Anything else falls through to the static assets in /public.
  */
 
-const DAY_MS = 86400000;
-
 // 1x1 transparent GIF
 const PIXEL = Uint8Array.from([
   0x47, 0x49, 0x46, 0x38, 0x39, 0x61, 1, 0, 1, 0, 0x80, 0, 0, 0, 0, 0, 0, 0, 0,
@@ -149,24 +147,63 @@ async function publicProjects(env, cors) {
   return json({ projects }, cors);
 }
 
+// Chart bucket size for a window length (minutes). Kept in sync with the same
+// table in public/app.js so live and demo charts line up.
+function bucketPlan(minutes) {
+  let bucketMin;
+  if (minutes <= 30) bucketMin = 2;
+  else if (minutes <= 60) bucketMin = 5;
+  else if (minutes <= 360) bucketMin = 15;
+  else if (minutes <= 720) bucketMin = 30;
+  else if (minutes <= 1440) bucketMin = 60;
+  else if (minutes <= 4320) bucketMin = 180;
+  else bucketMin = 1440; // daily buckets for 7d / 30d / 90d
+  const bucketMs = bucketMin * 60000;
+  const count = Math.max(1, Math.ceil((minutes * 60000) / bucketMs));
+  return { bucketMs, count };
+}
+
 async function overview(env, url, cors) {
-  const days = Math.min(365, Math.max(1, parseInt(url.searchParams.get("days") || "90", 10)));
-  const since = new Date(Date.now() - (days - 1) * DAY_MS).toISOString().slice(0, 10);
+  // Window length in minutes. Accept ?minutes=N; fall back to ?days=N for
+  // backward compatibility. Capped at one year.
+  let minutes = parseInt(url.searchParams.get("minutes") || "", 10);
+  if (!minutes || isNaN(minutes)) {
+    const days = parseInt(url.searchParams.get("days") || "7", 10);
+    minutes = (isNaN(days) ? 7 : days) * 1440;
+  }
+  minutes = Math.min(525600, Math.max(1, minutes));
+  const { bucketMs, count } = bucketPlan(minutes);
+  const since = Date.now() - minutes * 60000;
+
   const sites = (await env.DB.prepare(
     "SELECT id, name, domain, url, description, tags, public, color, created FROM sites ORDER BY created"
   ).all()).results || [];
 
   const projects = [];
+  const geoCountries = [];
+  const geoCities = [];
   for (const s of sites) {
-    const ev = (await env.DB.prepare(
-      "SELECT day, COUNT(*) AS views, COUNT(DISTINCT visitor) AS visitors " +
-      "FROM events WHERE site_id = ? AND day >= ? GROUP BY day"
-    ).bind(s.id, since).all()).results || [];
-    const byDay = {};
-    ev.forEach((r) => { byDay[r.day] = r; });
+    // Time series, bucketed by (ts - since) / bucketMs so the same code serves
+    // 2-minute buckets (30m window) through daily buckets (90d window).
+    const rows = (await env.DB.prepare(
+      "SELECT CAST((ts - ?) / ? AS INTEGER) AS b, COUNT(*) AS views, " +
+      "COUNT(DISTINCT visitor) AS visitors FROM events " +
+      "WHERE site_id = ? AND ts >= ? GROUP BY b"
+    ).bind(since, bucketMs, s.id, since).all()).results || [];
+    const byB = {};
+    rows.forEach((r) => { byB[r.b] = r; });
+    const traffic = [];
+    for (let i = 0; i < count; i++) {
+      const r = byB[i];
+      traffic.push({ date: since + i * bucketMs, visitors: r ? r.visitors : 0, views: r ? r.views : 0 });
+    }
+
+    const tot = (await env.DB.prepare(
+      "SELECT COUNT(*) AS views, COUNT(DISTINCT visitor) AS visitors FROM events WHERE site_id = ? AND ts >= ?"
+    ).bind(s.id, since).first()) || { views: 0, visitors: 0 };
 
     const tp = (await env.DB.prepare(
-      "SELECT path, COUNT(*) AS hits FROM events WHERE site_id = ? AND day >= ? " +
+      "SELECT path, COUNT(*) AS hits FROM events WHERE site_id = ? AND ts >= ? " +
       "GROUP BY path ORDER BY hits DESC LIMIT 10"
     ).bind(s.id, since).all()).results || [];
 
@@ -174,36 +211,35 @@ async function overview(env, url, cors) {
       "SELECT id, text, ts FROM notes WHERE site_id = ? ORDER BY ts DESC"
     ).bind(s.id).all()).results || [];
 
+    // Per-site geo so each site's detail view can map its own visitors.
+    const cRows = (await env.DB.prepare(
+      "SELECT country, COUNT(DISTINCT visitor) AS visitors FROM events " +
+      "WHERE site_id = ? AND ts >= ? AND country != '' GROUP BY country"
+    ).bind(s.id, since).all()).results || [];
+    cRows.forEach((r) => geoCountries.push({ site: s.id, country: r.country, visitors: r.visitors }));
+
+    const cityRows = (await env.DB.prepare(
+      "SELECT country, city, lat, lon, COUNT(DISTINCT visitor) AS visitors FROM events " +
+      "WHERE site_id = ? AND ts >= ? AND city != '' AND lat IS NOT NULL AND lon IS NOT NULL " +
+      "GROUP BY country, city, lat, lon"
+    ).bind(s.id, since).all()).results || [];
+    cityRows.forEach((r) => geoCities.push({
+      site: s.id, country: r.country, city: r.city, lat: r.lat, lon: r.lon, visitors: r.visitors,
+    }));
+
     projects.push({
       id: s.id, name: s.name, domain: s.domain, url: s.url || "", description: s.description || "",
       tags: s.tags || "", public: !!s.public, color: s.color, created: s.created,
-      traffic: fillDays(days, byDay),
+      traffic, totals: { visitors: tot.visitors || 0, views: tot.views || 0 },
       topPages: tp.map((r) => ({ path: r.path, hits: r.hits })),
       notes: notes.map((n) => ({ id: n.id, text: n.text, ts: n.ts })),
     });
   }
 
-  // Unique visitors per country per day, across all sites (for the world map).
-  // Visitor hashes are per site+day, so this matches how the overview stats
-  // sum daily uniques.
-  const geo = (await env.DB.prepare(
-    "SELECT day, country, COUNT(DISTINCT visitor) AS visitors FROM events " +
-    "WHERE day >= ? AND country != '' GROUP BY day, country"
-  ).bind(since).all()).results || [];
-
-  // City-level detail (rounded coordinates) for the map's bubbles.
-  const cityRows = (await env.DB.prepare(
-    "SELECT day, country, city, lat, lon, COUNT(DISTINCT visitor) AS visitors FROM events " +
-    "WHERE day >= ? AND city != '' AND lat IS NOT NULL AND lon IS NOT NULL " +
-    "GROUP BY day, country, city, lat, lon"
-  ).bind(since).all()).results || [];
-
   return json({
+    window: { minutes, bucketMs, count, since },
     projects,
-    countries: geo.map((r) => ({ day: r.day, country: r.country, visitors: r.visitors })),
-    cities: cityRows.map((r) => ({
-      day: r.day, country: r.country, city: r.city, lat: r.lat, lon: r.lon, visitors: r.visitors,
-    })),
+    geo: { countries: geoCountries, cities: geoCities },
   }, cors);
 }
 
@@ -300,18 +336,6 @@ async function ensureSchema(env) {
     try { await env.DB.prepare("ALTER TABLE events ADD COLUMN " + col).run(); } catch (e) { /* exists */ }
   }
   schemaReady = true;
-}
-
-function fillDays(days, byDay) {
-  const out = [];
-  const today = new Date();
-  today.setUTCHours(0, 0, 0, 0);
-  for (let i = days - 1; i >= 0; i--) {
-    const d = new Date(today.getTime() - i * DAY_MS);
-    const r = byDay[d.toISOString().slice(0, 10)];
-    out.push({ date: d.getTime(), visitors: r ? r.visitors : 0, views: r ? r.views : 0 });
-  }
-  return out;
 }
 
 async function sha256(str) {

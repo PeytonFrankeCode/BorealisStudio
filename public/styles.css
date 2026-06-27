@@ -94,8 +94,8 @@ h2 { font-size: 16px; margin: 0; }
 .muted { color: var(--muted); font-size: 13px; }
 
 /* Range toggle */
-.range-toggle { display: inline-flex; background: rgba(255,255,255,0.04); border: 1px solid var(--border); border-radius: 10px; padding: 3px; }
-.range-toggle button { font: inherit; font-weight: 600; font-size: 13px; color: var(--muted); background: transparent; border: 0; padding: 6px 14px; border-radius: 8px; cursor: pointer; }
+.range-toggle { display: inline-flex; flex-wrap: wrap; gap: 2px; background: rgba(255,255,255,0.04); border: 1px solid var(--border); border-radius: 10px; padding: 3px; }
+.range-toggle button { font: inherit; font-weight: 600; font-size: 13px; color: var(--muted); background: transparent; border: 0; padding: 6px 11px; border-radius: 8px; cursor: pointer; }
 .range-toggle button.active { background: rgba(52,200,163,0.16); color: var(--accent); }
 
 /* Stat grid */

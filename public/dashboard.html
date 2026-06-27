@@ -44,13 +44,9 @@
       <div class="page-head">
         <div>
           <h1>Overview</h1>
-          <p class="muted">Traffic across all your sites — last 30 days</p>
+          <p class="muted" id="overviewSub">Traffic across all your sites</p>
         </div>
-        <div class="range-toggle" id="globalRange" role="tablist">
-          <button data-days="7">7d</button>
-          <button data-days="30" class="active">30d</button>
-          <button data-days="90">90d</button>
-        </div>
+        <div class="range-toggle" id="globalRange" role="tablist"></div>
       </div>
 
       <div class="stat-grid" id="statGrid"></div>
@@ -101,11 +97,7 @@
           <span class="public-badge" id="publicBadge"></span>
         </div>
         <div class="detail-actions">
-          <div class="range-toggle" id="detailRange" role="tablist">
-            <button data-days="7">7d</button>
-            <button data-days="30" class="active">30d</button>
-            <button data-days="90">90d</button>
-          </div>
+          <div class="range-toggle" id="detailRange" role="tablist"></div>
           <button class="btn ghost" id="snippetBtn">Tracking snippet</button>
           <button class="btn ghost danger" id="deleteProjectBtn">Delete</button>
         </div>
@@ -122,6 +114,17 @@
           </div>
         </div>
         <canvas id="detailChart" height="260"></canvas>
+      </div>
+
+      <div class="panel chart-panel" id="geoPanelDetail">
+        <div class="panel-head">
+          <h2>Visitors by location</h2>
+          <span class="muted" id="geoChipDetail"></span>
+        </div>
+        <div class="geo-wrap">
+          <div class="world-map" id="worldMapDetail" role="img" aria-label="World map of unique visitors for this site"></div>
+          <ol class="geo-list" id="geoListDetail"></ol>
+        </div>
       </div>
 
       <!-- Public profile editor -->

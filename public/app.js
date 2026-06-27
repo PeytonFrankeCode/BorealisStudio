@@ -8,6 +8,7 @@
   const STORE_KEY = "borealis.studio.v1";
   const TOKEN_KEY = "borealis.admin.token";
   const DAY = 86400000;
+  const SVGNS = "http://www.w3.org/2000/svg";
 
   /* ---------- Palette (from the Borealis Software aurora logo) ---------- */
   const C = {
@@ -18,11 +19,47 @@
     muted: "#8da2c4",
   };
 
+  /* ---------------------------- Time ranges ------------------------- */
+  // Each range is a window length in minutes.
+  const RANGES = [
+    { min: 30, label: "30m", long: "last 30 minutes" },
+    { min: 60, label: "1h", long: "last hour" },
+    { min: 360, label: "6h", long: "last 6 hours" },
+    { min: 720, label: "12h", long: "last 12 hours" },
+    { min: 1440, label: "24h", long: "last 24 hours" },
+    { min: 4320, label: "3d", long: "last 3 days" },
+    { min: 10080, label: "7d", long: "last 7 days" },
+    { min: 43200, label: "30d", long: "last 30 days" },
+    { min: 129600, label: "90d", long: "last 90 days" },
+  ];
+  function rangeLong(min) { const r = RANGES.find((x) => x.min === min); return r ? r.long : min + "m"; }
+  function rangeShort(min) { const r = RANGES.find((x) => x.min === min); return r ? r.label : min + "m"; }
+
+  // Chart bucket size for a window. Mirrors bucketPlan() in worker/index.js so
+  // the live and demo charts have identical shapes.
+  function bucketPlan(minutes) {
+    let bucketMin;
+    if (minutes <= 30) bucketMin = 2;
+    else if (minutes <= 60) bucketMin = 5;
+    else if (minutes <= 360) bucketMin = 15;
+    else if (minutes <= 720) bucketMin = 30;
+    else if (minutes <= 1440) bucketMin = 60;
+    else if (minutes <= 4320) bucketMin = 180;
+    else bucketMin = 1440;
+    const bucketMs = bucketMin * 60000;
+    const count = Math.max(1, Math.ceil((minutes * 60000) / bucketMs));
+    return { bucketMs: bucketMs, count: count };
+  }
+
   /* ----------------------------- State ----------------------------- */
-  let state = { projects: [] };
+  const EMPTY = { window: null, projects: [], geo: { countries: [], cities: [] } };
+  let state = { projects: [] };   // demo metadata store (persisted): names, notes, profile
+  let demoEvents = [];            // demo raw pageview events (in-memory)
+  let overviewData = EMPTY;       // window-scoped data for the overview view
+  let detailData = EMPTY;         // window-scoped data for the open detail view
   let currentId = null;
-  let globalDays = 30;
-  let detailDays = 30;
+  let globalMin = 10080;          // overview window (7 days)
+  let detailMin = 10080;          // detail window (7 days)
   let REMOTE = false;        // true when served by the Cloudflare Worker backend
   let authRequired = false;  // backend has an ADMIN_TOKEN configured
   let needLogin = false;     // logged out / wrong password
@@ -33,16 +70,14 @@
       const raw = localStorage.getItem(STORE_KEY);
       if (raw) {
         const data = JSON.parse(raw);
-        if (!data.countries) data.countries = genCountryRows(); // older demo saves
-        if (!data.cities) data.cities = genCityRows();
-        return data;
+        if (data && data.projects) return { projects: data.projects };
       }
     } catch (e) { /* ignore */ }
-    return { projects: seedProjects(), countries: genCountryRows(), cities: genCityRows() };
+    return { projects: seedProjects() };
   }
   function save() {
     if (REMOTE) return; // persistence lives in D1 on the backend
-    try { localStorage.setItem(STORE_KEY, JSON.stringify(state)); } catch (e) {}
+    try { localStorage.setItem(STORE_KEY, JSON.stringify({ projects: state.projects })); } catch (e) {}
   }
 
   /* --------------------------- Backend API ------------------------- */
@@ -65,9 +100,9 @@
           authRequired = !!h.authRequired;
           adminToken = localStorage.getItem(TOKEN_KEY) || "";
           try {
-            await reloadOverview();
+            await loadOverview();
           } catch (e) {
-            if (e.status === 401) { needLogin = true; state = { projects: [] }; }
+            if (e.status === 401) { needLogin = true; overviewData = EMPTY; }
             else throw e;
           }
           return;
@@ -75,6 +110,8 @@
       } catch (e) { /* fall through to local mode */ }
     }
     state = load();
+    demoEvents = genDemoEvents(state.projects);
+    await loadOverview();
   }
 
   function authHeaders(extra) {
@@ -91,17 +128,35 @@
     return r.status === 204 ? null : r.json();
   }
 
-  async function reloadOverview() {
-    const data = await api("/api/overview?days=90");
-    state.projects = data.projects || [];
-    state.countries = data.countries || [];
-    state.cities = data.cities || [];
+  // Window-scoped data for a given length (minutes): live fetch, or demo compute.
+  async function dataForWindow(min) {
+    if (REMOTE) return await api("/api/overview?minutes=" + min);
+    return demoWindow(min);
   }
+  async function loadOverview() { overviewData = await dataForWindow(globalMin); }
+  async function loadDetail() {
+    detailData = (detailMin === globalMin) ? overviewData : await dataForWindow(detailMin);
+  }
+  // Refresh whichever data backs the current view(s) after a mutation.
+  async function reloadAll() {
+    await loadOverview();
+    if (currentId) await loadDetail();
+  }
+
+  function activeProjects() {
+    if (currentId && detailData.projects.length) return detailData.projects;
+    return overviewData.projects;
+  }
+  function getProject(id) {
+    return activeProjects().find((p) => p.id === id) ||
+      overviewData.projects.find((p) => p.id === id);
+  }
+  function metaProject(id) { return state.projects.find((p) => p.id === id); }
 
   async function tryLogin(pw) {
     adminToken = (pw || "").trim();
     try {
-      await reloadOverview();
+      await loadOverview();
       localStorage.setItem(TOKEN_KEY, adminToken);
       needLogin = false;
       hideLogin();
@@ -117,7 +172,7 @@
     adminToken = "";
     localStorage.removeItem(TOKEN_KEY);
     needLogin = true;
-    state = { projects: [] };
+    overviewData = EMPTY;
     if (currentId) closeDetail();
     renderDashboard();
     showLogin();
@@ -129,101 +184,135 @@
   }
   function hideLogin() { const ov = $("#loginBackdrop"); if (ov) ov.hidden = true; }
 
-  /* --------------------------- Seed data --------------------------- */
+  /* --------------------------- Demo data --------------------------- */
+  // Metadata only (no traffic — that comes from demoEvents).
   function seedProjects() {
     const presets = [
-      { name: "Borealis Software", domain: "borealissoftwares.com", color: "#34c8a3", base: 320, growth: 1.2,
+      { name: "Borealis Software", domain: "borealissoftwares.com", color: "#34c8a3",
         description: "Studio site and home base for everything we build.", tags: "Brand, Web", public: true },
-      { name: "Aurora Portfolio", domain: "aurora.design", color: "#2f8fd0", base: 140, growth: 0.6,
+      { name: "Aurora Portfolio", domain: "aurora.design", color: "#2f8fd0",
         description: "A clean portfolio template for creative freelancers.", tags: "Next.js, Design", public: true },
-      { name: "Northern Blog", domain: "northernlights.blog", color: "#8a4dff", base: 210, growth: -0.3,
+      { name: "Northern Blog", domain: "northernlights.blog", color: "#8a4dff",
         description: "Long-form writing on software, design, and the north.", tags: "Writing", public: false },
     ];
     return presets.map((p) => ({
-      id: uid(),
-      name: p.name,
-      domain: p.domain,
-      url: "https://" + p.domain,
-      description: p.description,
-      tags: p.tags,
-      public: p.public,
-      color: p.color,
-      created: Date.now(),
+      id: uid(), name: p.name, domain: p.domain, url: "https://" + p.domain,
+      description: p.description, tags: p.tags, public: p.public, color: p.color, created: Date.now(),
       notes: p.name === "Borealis Software"
         ? [{ id: uid(), text: "Launched the new landing page — watching bounce rate this week.", ts: Date.now() - 2 * DAY }]
         : [],
-      traffic: genTraffic(120, p.base, p.growth),
-      topPages: genTopPages(p.base),
     }));
   }
 
-  function genTraffic(days, base, growth) {
-    const out = [];
-    const now = startOfDay(Date.now());
-    for (let i = days - 1; i >= 0; i--) {
-      const date = now - i * DAY;
-      const dow = new Date(date).getDay();
-      const weekend = dow === 0 || dow === 6 ? 0.7 : 1;
-      const trend = 1 + (growth * (days - i)) / days;
-      const noise = 0.75 + Math.random() * 0.5;
-      const visitors = Math.max(3, Math.round(base * weekend * trend * noise));
-      const views = Math.round(visitors * (1.8 + Math.random() * 1.4));
-      out.push({ date, visitors, views });
+  const DEMO_CITIES = [
+    { country: "US", city: "New York", lat: 40.7, lon: -74.0, w: 12 },
+    { country: "US", city: "Los Angeles", lat: 34.1, lon: -118.2, w: 8 },
+    { country: "US", city: "Chicago", lat: 41.9, lon: -87.6, w: 6 },
+    { country: "US", city: "Austin", lat: 30.3, lon: -97.7, w: 4 },
+    { country: "CA", city: "Toronto", lat: 43.7, lon: -79.4, w: 6 },
+    { country: "CA", city: "Vancouver", lat: 49.3, lon: -123.1, w: 3 },
+    { country: "GB", city: "London", lat: 51.5, lon: -0.1, w: 7 },
+    { country: "IN", city: "Mumbai", lat: 19.1, lon: 72.9, w: 5 },
+    { country: "DE", city: "Berlin", lat: 52.5, lon: 13.4, w: 4 },
+    { country: "AU", city: "Sydney", lat: -33.9, lon: 151.2, w: 4 },
+    { country: "FR", city: "Paris", lat: 48.9, lon: 2.4, w: 3 },
+    { country: "BR", city: "São Paulo", lat: -23.6, lon: -46.6, w: 3 },
+    { country: "NL", city: "Amsterdam", lat: 52.4, lon: 4.9, w: 2 },
+    { country: "JP", city: "Tokyo", lat: 35.7, lon: 139.7, w: 2 },
+  ];
+  const DEMO_CITY_TOTAL = DEMO_CITIES.reduce((a, c) => a + c.w, 0);
+  function weightedCity() {
+    let r = Math.random() * DEMO_CITY_TOTAL;
+    for (const c of DEMO_CITIES) { r -= c.w; if (r <= 0) return c; }
+    return DEMO_CITIES[0];
+  }
+  const DEMO_PATHS = ["/", "/about", "/work", "/contact", "/blog", "/pricing"];
+
+  // Synthesize ~90 days of pageview events for one site, including a few in the
+  // last ~25 minutes so the short windows (30m/1h) aren't empty.
+  function genEventsForSite(p, idx) {
+    const events = [];
+    const now = Date.now();
+    const base = 26 + (idx % 5) * 12; // visits per day-ish
+    for (let d = 89; d >= 0; d--) {
+      const dayStart = startOfDay(now - d * DAY);
+      const dayEnd = Math.min(now, dayStart + DAY);
+      if (dayEnd <= dayStart) continue;
+      const span = dayEnd - dayStart;
+      const dow = new Date(dayStart).getDay();
+      const weekend = (dow === 0 || dow === 6) ? 0.7 : 1;
+      const n = Math.max(0, Math.round(base * weekend * (0.6 + Math.random() * 0.8)));
+      const dayUsers = Math.max(1, Math.round(n * 0.7)); // distinct visitors that day
+      for (let k = 0; k < n; k++) {
+        const ts = dayStart + Math.random() * span;
+        const c = weightedCity();
+        const visitor = p.id + "|" + dayStart + "|" + Math.floor(Math.random() * dayUsers);
+        events.push({ site: p.id, ts: ts, path: DEMO_PATHS[Math.floor(Math.random() * DEMO_PATHS.length)],
+          country: c.country, city: c.city, lat: c.lat, lon: c.lon, visitor: visitor });
+      }
     }
-    return out;
+    for (let k = 0; k < 5; k++) {
+      const ts = now - Math.floor(Math.random() * 25 * 60000);
+      const c = weightedCity();
+      events.push({ site: p.id, ts: ts, path: "/", country: c.country, city: c.city, lat: c.lat, lon: c.lon,
+        visitor: p.id + "|recent|" + Math.floor(ts / 300000) + "|" + k });
+    }
+    return events;
+  }
+  function genDemoEvents(projects) {
+    const all = [];
+    projects.forEach((p, i) => { all.push.apply(all, genEventsForSite(p, i)); });
+    return all;
   }
 
-  // Demo rows shaped like the Worker's countries feed: {day, country, visitors}.
-  function genCountryRows() {
-    const weights = { US: 34, CA: 9, GB: 8, IN: 7, DE: 6, AU: 5, FR: 4, BR: 4, NL: 3, JP: 3, SE: 2, MX: 2, ES: 2, PL: 1 };
-    const out = [];
-    const today = new Date();
-    today.setUTCHours(0, 0, 0, 0);
-    for (let i = 89; i >= 0; i--) {
-      const day = new Date(today.getTime() - i * DAY).toISOString().slice(0, 10);
-      Object.keys(weights).forEach((c) => {
-        const v = Math.round(weights[c] * (0.5 + Math.random()));
-        if (v > 0) out.push({ day, country: c, visitors: v });
+  // Aggregate the in-memory demo events into the same shape the Worker returns.
+  function demoWindow(min) {
+    const plan = bucketPlan(min);
+    const since = Date.now() - min * 60000;
+    const projects = state.projects.map((mp) => {
+      const evs = demoEvents.filter((e) => e.site === mp.id && e.ts >= since);
+      const buckets = [];
+      const sets = [];
+      for (let i = 0; i < plan.count; i++) { buckets.push({ date: since + i * plan.bucketMs, visitors: 0, views: 0 }); sets.push(null); }
+      evs.forEach((e) => {
+        let i = Math.floor((e.ts - since) / plan.bucketMs);
+        if (i < 0) i = 0; if (i >= plan.count) i = plan.count - 1;
+        buckets[i].views++;
+        (sets[i] || (sets[i] = new Set())).add(e.visitor);
       });
-    }
-    return out;
-  }
-
-  // Demo rows shaped like the Worker's cities feed: {day, country, city, lat, lon, visitors}.
-  function genCityRows() {
-    const cities = [
-      { country: "US", city: "New York", lat: 40.7, lon: -74.0, w: 12 },
-      { country: "US", city: "Los Angeles", lat: 34.1, lon: -118.2, w: 8 },
-      { country: "US", city: "Chicago", lat: 41.9, lon: -87.6, w: 6 },
-      { country: "US", city: "Austin", lat: 30.3, lon: -97.7, w: 4 },
-      { country: "CA", city: "Toronto", lat: 43.7, lon: -79.4, w: 6 },
-      { country: "CA", city: "Vancouver", lat: 49.3, lon: -123.1, w: 3 },
-      { country: "GB", city: "London", lat: 51.5, lon: -0.1, w: 7 },
-      { country: "IN", city: "Mumbai", lat: 19.1, lon: 72.9, w: 5 },
-      { country: "DE", city: "Berlin", lat: 52.5, lon: 13.4, w: 4 },
-      { country: "AU", city: "Sydney", lat: -33.9, lon: 151.2, w: 4 },
-      { country: "FR", city: "Paris", lat: 48.9, lon: 2.4, w: 3 },
-      { country: "BR", city: "São Paulo", lat: -23.6, lon: -46.6, w: 3 },
-      { country: "NL", city: "Amsterdam", lat: 52.4, lon: 4.9, w: 2 },
-      { country: "JP", city: "Tokyo", lat: 35.7, lon: 139.7, w: 2 },
-    ];
-    const out = [];
-    const today = new Date();
-    today.setUTCHours(0, 0, 0, 0);
-    for (let i = 89; i >= 0; i--) {
-      const day = new Date(today.getTime() - i * DAY).toISOString().slice(0, 10);
-      cities.forEach((c) => {
-        const v = Math.round(c.w * (0.4 + Math.random()));
-        if (v > 0) out.push({ day, country: c.country, city: c.city, lat: c.lat, lon: c.lon, visitors: v });
+      for (let i = 0; i < plan.count; i++) buckets[i].visitors = sets[i] ? sets[i].size : 0;
+      const pathMap = {};
+      evs.forEach((e) => { pathMap[e.path] = (pathMap[e.path] || 0) + 1; });
+      const topPages = Object.keys(pathMap).map((k) => ({ path: k, hits: pathMap[k] }))
+        .sort((a, b) => b.hits - a.hits).slice(0, 10);
+      return {
+        id: mp.id, name: mp.name, domain: mp.domain, url: mp.url || "", description: mp.description || "",
+        tags: mp.tags || "", public: !!mp.public, color: mp.color, created: mp.created,
+        traffic: buckets, totals: { visitors: new Set(evs.map((e) => e.visitor)).size, views: evs.length },
+        topPages: topPages, notes: mp.notes || [],
+      };
+    });
+    const countries = [];
+    const cities = [];
+    state.projects.forEach((mp) => {
+      const evs = demoEvents.filter((e) => e.site === mp.id && e.ts >= since);
+      const cset = {};
+      const cityMap = {};
+      evs.forEach((e) => {
+        if (e.country) (cset[e.country] || (cset[e.country] = new Set())).add(e.visitor);
+        if (e.city) {
+          const key = e.city + "|" + e.country;
+          const c = cityMap[key] || (cityMap[key] = { country: e.country, city: e.city, lat: e.lat, lon: e.lon, set: new Set() });
+          c.set.add(e.visitor);
+        }
       });
-    }
-    return out;
-  }
-
-  function genTopPages(base) {
-    const paths = ["/", "/about", "/work", "/contact", "/blog", "/pricing"];
-    return paths.map((p, i) => ({ path: p, hits: Math.round(base * (1.5 - i * 0.2) * (0.8 + Math.random() * 0.6)) }))
-      .sort((a, b) => b.hits - a.hits);
+      Object.keys(cset).forEach((country) => countries.push({ site: mp.id, country: country, visitors: cset[country].size }));
+      Object.keys(cityMap).forEach((k) => {
+        const c = cityMap[k];
+        cities.push({ site: mp.id, country: c.country, city: c.city, lat: c.lat, lon: c.lon, visitors: c.set.size });
+      });
+    });
+    return { window: { minutes: min, bucketMs: plan.bucketMs, count: plan.count, since: since }, projects: projects, geo: { countries: countries, cities: cities } };
   }
 
   /* ----------------------------- Utils ----------------------------- */
@@ -242,7 +331,6 @@
     const d = Math.floor(h / 24); if (d < 30) return d + "d ago";
     return new Date(ts).toLocaleDateString();
   }
-  function lastN(traffic, n) { return traffic.slice(-n); }
   function sum(arr, key) { return arr.reduce((a, b) => a + b[key], 0); }
   function $(sel) { return document.querySelector(sel); }
   function el(tag, cls, html) { const e = document.createElement(tag); if (cls) e.className = cls; if (html != null) e.innerHTML = html; return e; }
@@ -260,19 +348,12 @@
   window.Borealis = {
     track(siteId, path) {
       if (REMOTE) return; // real pageviews are recorded by the Worker /collect endpoint
-      const p = state.projects.find((x) => x.id === siteId);
-      if (!p) return;
-      const today = startOfDay(Date.now());
-      let row = p.traffic[p.traffic.length - 1];
-      if (!row || row.date !== today) { row = { date: today, visitors: 0, views: 0 }; p.traffic.push(row); }
-      row.views += 1;
-      row.visitors += 1; // simple model: treat each call as a unique-ish visit
-      const path0 = path || location.pathname || "/";
-      const tp = p.topPages.find((x) => x.path === path0);
-      if (tp) tp.hits += 1; else p.topPages.push({ path: path0, hits: 1 });
-      p.topPages.sort((a, b) => b.hits - a.hits);
-      save();
-      if (currentId === p.id) renderDetail();
+      if (!metaProject(siteId)) return;
+      const now = Date.now();
+      const c = weightedCity();
+      demoEvents.push({ site: siteId, ts: now, path: path || location.pathname || "/",
+        country: c.country, city: c.city, lat: c.lat, lon: c.lon, visitor: siteId + "|live|" + now });
+      reloadAll().then(() => { currentId ? renderDetail() : renderDashboard(); });
     },
   };
 
@@ -344,7 +425,7 @@
     const ctx = canvas.getContext("2d"); ctx.scale(dpr, dpr);
     ctx.clearRect(0, 0, cssW, cssH);
     const max = Math.max(1, ...data), min = Math.min(...data);
-    const xAt = (i) => (cssW * i) / (data.length - 1);
+    const xAt = (i) => (cssW * i) / (Math.max(1, data.length - 1));
     const yAt = (v) => 4 + (cssH - 8) - ((cssH - 8) * (v - min)) / Math.max(1, max - min);
     const grad = ctx.createLinearGradient(0, 0, 0, cssH);
     grad.addColorStop(0, color + "55"); grad.addColorStop(1, color + "00");
@@ -356,8 +437,12 @@
     ctx.strokeStyle = color; ctx.lineWidth = 1.6; ctx.lineJoin = "round"; ctx.stroke();
   }
 
-  function dayLabels(traffic) {
-    return traffic.map((r) => new Date(r.date).toLocaleDateString(undefined, { month: "short", day: "numeric" }));
+  // Date labels for the chart x-axis: clock times for sub-day windows, dates above.
+  function bucketLabels(traffic, min) {
+    const subday = min <= 1440;
+    return traffic.map((r) => subday
+      ? new Date(r.date).toLocaleTimeString(undefined, { hour: "2-digit", minute: "2-digit" })
+      : new Date(r.date).toLocaleDateString(undefined, { month: "short", day: "numeric" }));
   }
 
   /* --------------------------- Rendering --------------------------- */
@@ -377,19 +462,35 @@
     return `<div class="stat-card"><div class="label">${label}</div><div class="value">${value}</div>${deltaPctVal == null ? "" : deltaHtml(deltaPctVal)}</div>`;
   }
 
-  function renderDashboard() {
-    const ps = state.projects;
-    const grid = $("#statGrid");
-    const totals = ps.map((p) => lastN(p.traffic, globalDays));
+  // Sum aligned per-bucket series across all sites (they share the same window).
+  function combineBuckets(projects) {
+    if (!projects.length) return [];
+    const len = Math.max.apply(null, projects.map((p) => p.traffic.length));
+    const out = [];
+    for (let i = 0; i < len; i++) {
+      let date = null, visitors = 0, views = 0;
+      projects.forEach((p) => {
+        const r = p.traffic[i];
+        if (r) { date = r.date; visitors += r.visitors; views += r.views; }
+      });
+      out.push({ date: date || Date.now(), visitors: visitors, views: views });
+    }
+    return out;
+  }
 
-    const allVisitors = totals.reduce((a, t) => a + sum(t, "visitors"), 0);
-    const allViews = totals.reduce((a, t) => a + sum(t, "views"), 0);
-    // combined daily visitors for delta + chart
-    const combined = combineDaily(ps, globalDays);
+  function renderDashboard() {
+    const ps = overviewData.projects;
+    const grid = $("#statGrid");
+    const sub = $("#overviewSub");
+    if (sub) sub.textContent = "Traffic across all your sites — " + rangeLong(globalMin);
+
+    const allVisitors = ps.reduce((a, p) => a + (p.totals ? p.totals.visitors : 0), 0);
+    const allViews = ps.reduce((a, p) => a + (p.totals ? p.totals.views : 0), 0);
+    const combined = combineBuckets(ps);
     const vDelta = deltaPct(combined, "visitors");
 
     let top = null, topV = -1;
-    ps.forEach((p) => { const v = sum(lastN(p.traffic, globalDays), "visitors"); if (v > topV) { topV = v; top = p; } });
+    ps.forEach((p) => { const v = p.totals ? p.totals.visitors : 0; if (v > topV) { topV = v; top = p; } });
 
     grid.innerHTML =
       statCard("Total visitors", fmt(allVisitors), vDelta) +
@@ -400,17 +501,14 @@
     $("#trendChip").innerHTML = ps.length ? deltaHtml(vDelta).replace(/<\/?div[^>]*>/g, "") : "";
     $("#projectCount").textContent = ps.length ? `${ps.length} site${ps.length > 1 ? "s" : ""}` : "";
 
-    // chart
     if (combined.length) {
       drawLineChart($("#overviewChart"), [
         { data: combined.map((r) => r.visitors), color: C.visitors, fill: true },
-      ], { labels: dayLabels(combined) });
+      ], { labels: bucketLabels(combined, globalMin) });
     }
 
-    // world map
-    renderGeo();
+    renderGeoInto($("#worldMap"), $("#geoList"), $("#geoChip"), overviewData.geo, globalMin);
 
-    // project cards
     const pg = $("#projectGrid");
     pg.innerHTML = "";
     ps.forEach((p) => pg.appendChild(projectCard(p)));
@@ -420,45 +518,19 @@
     $(".section-head").style.display = ps.length ? "" : "none";
     $("#statGrid").style.display = ps.length ? "" : "none";
 
-    // render sparks after attach (need layout width)
     requestAnimationFrame(() => {
       ps.forEach((p) => {
         const c = document.getElementById("spark-" + p.id);
-        if (c) drawSpark(c, lastN(p.traffic, globalDays).map((r) => r.visitors), p.color);
+        if (c) drawSpark(c, p.traffic.map((r) => r.visitors), p.color);
       });
     });
   }
 
-  /* ----------------------- Visitors by country ---------------------- */
-  let geoSvgReady = false;
-
+  /* ----------------------- Visitors by location --------------------- */
   function countryName(code, fallback) {
     try {
       return new Intl.DisplayNames(["en"], { type: "region" }).of(code) || fallback || code;
     } catch (e) { return fallback || code; }
-  }
-
-  // Sum unique daily visitors per country over the selected range.
-  function geoTotals(days) {
-    const cutoff = new Date(Date.now() - (days - 1) * DAY).toISOString().slice(0, 10);
-    const totals = {};
-    (state.countries || []).forEach((r) => {
-      if (r.day >= cutoff && r.country) totals[r.country] = (totals[r.country] || 0) + r.visitors;
-    });
-    return totals;
-  }
-
-  // Sum unique daily visitors per city over the selected range.
-  function geoCityTotals(days) {
-    const cutoff = new Date(Date.now() - (days - 1) * DAY).toISOString().slice(0, 10);
-    const byKey = {};
-    (state.cities || []).forEach((r) => {
-      if (r.day < cutoff || !r.city) return;
-      const key = r.city + "|" + r.country;
-      const c = byKey[key] || (byKey[key] = { city: r.city, country: r.country, lat: r.lat, lon: r.lon, visitors: 0 });
-      c.visitors += r.visitors;
-    });
-    return Object.values(byKey).sort((a, b) => b.visitors - a.visitors);
   }
 
   // Natural Earth projection (same as the generated map), lat/lon in degrees.
@@ -471,114 +543,105 @@
     return [MAP.tx + MAP.k * x, MAP.ty - MAP.k * y];
   }
 
-  function buildGeoSvg() {
-    const host = $("#worldMap");
-    if (!host || geoSvgReady || !window.WORLD_MAP) return;
+  // Build the SVG world map inside a host element once (guarded per host).
+  function buildGeoSvg(host) {
+    if (!host || host.dataset.built || !window.WORLD_MAP) return;
     const MAP = window.WORLD_MAP;
-    const svg = document.createElementNS("http://www.w3.org/2000/svg", "svg");
+    const svg = document.createElementNS(SVGNS, "svg");
     svg.setAttribute("viewBox", "0 0 " + MAP.w + " " + MAP.h);
     MAP.countries.forEach((c) => {
-      const p = document.createElementNS("http://www.w3.org/2000/svg", "path");
+      const p = document.createElementNS(SVGNS, "path");
       p.setAttribute("d", c.d);
       p.dataset.code = c.c;
-      p.appendChild(document.createElementNS("http://www.w3.org/2000/svg", "title"));
+      p.appendChild(document.createElementNS(SVGNS, "title"));
       svg.appendChild(p);
     });
-    const bubbles = document.createElementNS("http://www.w3.org/2000/svg", "g");
-    bubbles.setAttribute("id", "geoBubbles");
-    svg.appendChild(bubbles);
+    const g = document.createElementNS(SVGNS, "g");
+    g.setAttribute("class", "geo-bubbles");
+    svg.appendChild(g);
     host.appendChild(svg);
-    geoSvgReady = true;
+    host.dataset.built = "1";
   }
 
-  function renderGeo() {
-    const host = $("#worldMap");
+  // Render a (pre-scoped) geo dataset into a map host + list + chip.
+  function renderGeoInto(host, listEl, chipEl, geo, min) {
     if (!host) return;
-    buildGeoSvg();
-    const totals = geoTotals(globalDays);
-    const entries = Object.entries(totals).sort((a, b) => b[1] - a[1]);
+    buildGeoSvg(host);
+
+    const cTotals = {};
+    (geo.countries || []).forEach((r) => { if (r.country) cTotals[r.country] = (cTotals[r.country] || 0) + r.visitors; });
+    const entries = Object.entries(cTotals).sort((a, b) => b[1] - a[1]);
     const max = entries.length ? entries[0][1] : 0;
     const total = entries.reduce((a, e) => a + e[1], 0);
-    const cities = geoCityTotals(globalDays);
-    $("#geoChip").textContent = entries.length
+
+    const cityMap = {};
+    (geo.cities || []).forEach((r) => {
+      if (!r.city) return;
+      const key = r.city + "|" + r.country;
+      const c = cityMap[key] || (cityMap[key] = { city: r.city, country: r.country, lat: r.lat, lon: r.lon, visitors: 0 });
+      c.visitors += r.visitors;
+    });
+    const cities = Object.values(cityMap).sort((a, b) => b.visitors - a.visitors);
+
+    if (chipEl) chipEl.textContent = entries.length
       ? fmt(total) + " unique visitors · " +
         (cities.length ? cities.length + (cities.length === 1 ? " city" : " cities") + " · " : "") +
-        entries.length + (entries.length === 1 ? " country" : " countries") + " · last " + globalDays + "d"
+        entries.length + (entries.length === 1 ? " country" : " countries") + " · " + rangeLong(min)
       : "";
 
     host.querySelectorAll("path").forEach((p) => {
-      const v = totals[p.dataset.code] || 0;
-      const t = max ? Math.sqrt(v / max) : 0; // sqrt keeps small counts visible
+      const v = cTotals[p.dataset.code] || 0;
+      const t = max ? Math.sqrt(v / max) : 0;
       p.style.fill = v
         ? "rgba(52, 200, 163, " + (0.14 + 0.5 * t).toFixed(3) + ")"
         : "rgba(120, 160, 220, 0.08)";
-      p.querySelector("title").textContent =
-        countryName(p.dataset.code) + ": " + (v ? fmt(v) + " visitor" + (v === 1 ? "" : "s") : "no visitors");
+      const ti = p.querySelector("title");
+      if (ti) ti.textContent = countryName(p.dataset.code) + ": " + (v ? fmt(v) + " visitor" + (v === 1 ? "" : "s") : "no visitors");
     });
 
-    // city bubbles (top 60, biggest first so small ones stay hoverable on top)
-    const bubbles = host.querySelector("#geoBubbles");
+    const bubbles = host.querySelector(".geo-bubbles");
     if (bubbles && window.WORLD_MAP) {
       bubbles.innerHTML = "";
       const cmax = cities.length ? cities[0].visitors : 0;
       cities.slice(0, 60).forEach((c) => {
         if (c.lat == null || c.lon == null) return;
-        const [x, y] = projectPoint(c.lon, c.lat);
-        const dot = document.createElementNS("http://www.w3.org/2000/svg", "circle");
-        dot.setAttribute("cx", x.toFixed(1));
-        dot.setAttribute("cy", y.toFixed(1));
-        dot.setAttribute("r", (3 + 9 * Math.sqrt(c.visitors / cmax)).toFixed(1));
+        const xy = projectPoint(c.lon, c.lat);
+        const dot = document.createElementNS(SVGNS, "circle");
+        dot.setAttribute("cx", xy[0].toFixed(1));
+        dot.setAttribute("cy", xy[1].toFixed(1));
+        dot.setAttribute("r", (3 + 9 * Math.sqrt(c.visitors / (cmax || 1))).toFixed(1));
         dot.setAttribute("class", "geo-dot");
-        const t = document.createElementNS("http://www.w3.org/2000/svg", "title");
-        t.textContent = c.city + ", " + countryName(c.country) + ": " +
-          fmt(c.visitors) + " visitor" + (c.visitors === 1 ? "" : "s");
+        const t = document.createElementNS(SVGNS, "title");
+        t.textContent = c.city + ", " + countryName(c.country) + ": " + fmt(c.visitors) + " visitor" + (c.visitors === 1 ? "" : "s");
         dot.appendChild(t);
         bubbles.appendChild(dot);
       });
     }
 
-    // top list: cities when we have them, otherwise countries
-    const list = $("#geoList");
-    list.innerHTML = "";
-    if (!entries.length) {
-      list.appendChild(el("li", "note-empty",
-        "No location data yet — locations are recorded with each new visit."));
-      return;
+    if (listEl) {
+      listEl.innerHTML = "";
+      if (!entries.length) {
+        listEl.appendChild(el("li", "note-empty", "No location data yet — locations are recorded with each new visit."));
+      } else {
+        const rows = cities.length
+          ? cities.slice(0, 8).map((c) => [c.city, c.visitors])
+          : entries.slice(0, 8).map((e) => [countryName(e[0]), e[1]]);
+        const rmax = rows[0][1];
+        rows.forEach((row) => {
+          const li = el("li");
+          const barW = Math.round((row[1] / rmax) * 78);
+          li.innerHTML = '<span class="path">' + escapeHtml(row[0]) + '</span>' +
+            '<span class="bar" style="width:' + barW + 'px"></span>' +
+            '<span class="hits">' + fmt(row[1]) + "</span>";
+          listEl.appendChild(li);
+        });
+      }
     }
-    const rows = cities.length
-      ? cities.slice(0, 8).map((c) => [c.city, c.visitors])
-      : entries.slice(0, 8).map(([code, v]) => [countryName(code), v]);
-    const rmax = rows[0][1];
-    rows.forEach(([label, v]) => {
-      const li = el("li");
-      const barW = Math.round((v / rmax) * 78);
-      li.innerHTML = '<span class="path">' + escapeHtml(label) + '</span>' +
-        '<span class="bar" style="width:' + barW + 'px"></span>' +
-        '<span class="hits">' + fmt(v) + "</span>";
-      list.appendChild(li);
-    });
-  }
-
-  function combineDaily(projects, days) {
-    if (!projects.length) return [];
-    const len = Math.min(days, Math.max(...projects.map((p) => p.traffic.length)));
-    const out = [];
-    for (let i = 0; i < len; i++) {
-      let date = null, visitors = 0, views = 0;
-      projects.forEach((p) => {
-        const slice = lastN(p.traffic, len);
-        const row = slice[i];
-        if (row) { date = row.date; visitors += row.visitors; views += row.views; }
-      });
-      out.push({ date: date || Date.now(), visitors, views });
-    }
-    return out;
   }
 
   function projectCard(p) {
-    const slice = lastN(p.traffic, globalDays);
-    const visitors = sum(slice, "visitors");
-    const views = sum(slice, "views");
+    const visitors = p.totals ? p.totals.visitors : 0;
+    const views = p.totals ? p.totals.views : 0;
     const card = el("div", "project-card");
     card.innerHTML = `
       <div class="pc-head">
@@ -595,7 +658,7 @@
       <canvas class="spark" id="spark-${p.id}"></canvas>
       <div class="pc-foot">
         <span>${p.notes.length} note${p.notes.length === 1 ? "" : "s"}${p.public ? " · public" : ""}</span>
-        <span class="badge">${globalDays}d</span>
+        <span class="badge">${rangeShort(globalMin)}</span>
       </div>`;
     card.addEventListener("click", () => openDetail(p.id));
     return card;
@@ -603,8 +666,9 @@
 
   /* ---------------------------- Detail ----------------------------- */
   function openDetail(id) {
-    currentId = id; detailDays = globalDays;
-    syncRange("#detailRange", detailDays);
+    currentId = id; detailMin = globalMin;
+    detailData = overviewData; // same window — reuse without an extra fetch
+    syncRange("#detailRange", detailMin);
     $("#dashboardView").hidden = true;
     $("#detailView").hidden = false;
     window.scrollTo(0, 0);
@@ -618,7 +682,7 @@
   }
 
   function renderDetail() {
-    const p = state.projects.find((x) => x.id === currentId);
+    const p = getProject(currentId);
     if (!p) return closeDetail();
     $("#detailDot").style.background = p.color;
     $("#detailDot").style.color = p.color;
@@ -627,21 +691,27 @@
     dom.textContent = p.domain;
     dom.href = /^https?:\/\//.test(p.domain) ? p.domain : "https://" + p.domain;
 
-    const slice = lastN(p.traffic, detailDays);
-    const visitors = sum(slice, "visitors");
-    const views = sum(slice, "views");
-    const perDay = Math.round(visitors / Math.max(1, slice.length));
+    const slice = p.traffic;
+    const visitors = p.totals ? p.totals.visitors : 0;
+    const views = p.totals ? p.totals.views : 0;
+    const perVisit = visitors ? (views / visitors) : 0;
     const bounce = 38 + Math.round((p.id.charCodeAt(0) % 20));
     $("#detailStats").innerHTML =
       statCard("Visitors", fmt(visitors), deltaPct(slice, "visitors")) +
       statCard("Pageviews", fmt(views), deltaPct(slice, "views")) +
-      statCard("Avg / day", fmt(perDay)) +
+      statCard("Pages / visit", perVisit.toFixed(1)) +
       statCard("Bounce rate", bounce + "%");
 
     drawLineChart($("#detailChart"), [
       { data: slice.map((r) => r.views), color: C.views, fill: true },
       { data: slice.map((r) => r.visitors), color: C.visitors, fill: true },
-    ], { labels: dayLabels(slice) });
+    ], { labels: bucketLabels(slice, detailMin) });
+
+    const dgeo = {
+      countries: (detailData.geo.countries || []).filter((r) => r.site === currentId),
+      cities: (detailData.geo.cities || []).filter((r) => r.site === currentId),
+    };
+    renderGeoInto($("#worldMapDetail"), $("#geoListDetail"), $("#geoChipDetail"), dgeo, detailMin);
 
     renderNotes(p);
     renderTopPages(p);
@@ -663,8 +733,6 @@
   }
 
   async function saveProfile() {
-    const p = state.projects.find((x) => x.id === currentId);
-    if (!p) return;
     const patch = {
       public: $("#profPublic").checked,
       url: $("#profUrl").value.trim(),
@@ -672,9 +740,11 @@
       description: $("#profDesc").value.trim(),
     };
     try {
-      if (REMOTE) await api("/api/sites/" + p.id, { method: "PATCH", body: JSON.stringify(patch) });
-      Object.assign(p, patch);
-      save(); renderProfile(p); toast("Public profile saved");
+      if (REMOTE) await api("/api/sites/" + currentId, { method: "PATCH", body: JSON.stringify(patch) });
+      else { Object.assign(metaProject(currentId), patch); save(); }
+      await reloadAll();
+      renderDetail();
+      toast("Public profile saved");
     } catch (err) {
       toast(err.status === 401 ? "Session expired — please unlock" : "Could not save");
       if (err.status === 401) logout();
@@ -697,15 +767,30 @@
           <span class="note-date">${timeAgo(note.ts)}</span>
           <button class="note-del" data-id="${note.id}">Delete</button>
         </div>`;
-      li.querySelector(".note-del").addEventListener("click", async () => {
-        try {
-          if (REMOTE) await api("/api/notes/" + note.id, { method: "DELETE" });
-          p.notes = p.notes.filter((x) => x.id !== note.id);
-          save(); renderNotes(p); toast("Note deleted");
-        } catch (err) { toast("Could not delete note"); }
-      });
+      li.querySelector(".note-del").addEventListener("click", () => deleteNote(note.id));
       list.appendChild(li);
     });
+  }
+
+  async function addNote(text) {
+    try {
+      if (REMOTE) await api("/api/sites/" + currentId + "/notes", { method: "POST", body: JSON.stringify({ text }) });
+      else { metaProject(currentId).notes.push({ id: uid(), text: text, ts: Date.now() }); save(); }
+      await reloadAll();
+      $("#noteInput").value = ""; renderDetail(); toast("Note added");
+    } catch (err) {
+      toast(err.status === 401 ? "Session expired — please unlock" : "Could not add note");
+      if (err.status === 401) logout();
+    }
+  }
+
+  async function deleteNote(noteId) {
+    try {
+      if (REMOTE) await api("/api/notes/" + noteId, { method: "DELETE" });
+      else { const mp = metaProject(currentId); mp.notes = mp.notes.filter((x) => x.id !== noteId); save(); }
+      await reloadAll();
+      renderDetail(); toast("Note deleted");
+    } catch (err) { toast("Could not delete note"); }
   }
 
   function renderTopPages(p) {
@@ -731,34 +816,37 @@
     if (REMOTE) {
       try {
         await api("/api/sites", { method: "POST", body: JSON.stringify({ name, domain, color: data.color }) });
-        await reloadOverview();
+        await loadOverview();
         renderDashboard();
         toast(`Added ${name}`);
       } catch (err) { toast(err.status === 401 ? "Session expired — please unlock" : "Could not add site"); if (err.status === 401) logout(); }
       return;
     }
-    const p = {
+    const mp = {
       id: uid(), name, domain, url: "https://" + domain, description: "", tags: "", public: false,
       color: data.color, created: Date.now(), notes: [],
-      traffic: data.seed ? genTraffic(120, 80 + Math.floor(Math.random() * 200), Math.random() - 0.4) : [{ date: startOfDay(Date.now()), visitors: 0, views: 0 }],
-      topPages: data.seed ? genTopPages(120) : [],
     };
-    state.projects.push(p); save(); renderDashboard();
-    toast(`Added ${p.name}`);
+    state.projects.push(mp);
+    if (data.seed) demoEvents.push.apply(demoEvents, genEventsForSite(mp, state.projects.length));
+    save();
+    await loadOverview();
+    renderDashboard();
+    toast(`Added ${mp.name}`);
   }
   async function deleteProject(id) {
-    const p = state.projects.find((x) => x.id === id);
+    const p = getProject(id);
     if (!p) return;
     if (!confirm(`Delete "${p.name}" and all its notes? This cannot be undone.`)) return;
     if (REMOTE) {
       try {
         await api("/api/sites/" + id, { method: "DELETE" });
-        await reloadOverview();
       } catch (err) { return toast(err.status === 401 ? "Session expired — please unlock" : "Could not delete site"); }
     } else {
       state.projects = state.projects.filter((x) => x.id !== id);
+      demoEvents = demoEvents.filter((e) => e.site !== id);
       save();
     }
+    await loadOverview();
     closeDetail(); toast("Site deleted");
   }
 
@@ -783,8 +871,20 @@
   function escapeHtml(s) {
     return String(s).replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
   }
-  function syncRange(sel, days) {
-    document.querySelectorAll(sel + " button").forEach((b) => b.classList.toggle("active", +b.dataset.days === days));
+  function populateRange(sel, min) {
+    const host = $(sel);
+    if (!host) return;
+    host.innerHTML = "";
+    RANGES.forEach((r) => {
+      const b = document.createElement("button");
+      b.dataset.min = r.min;
+      b.textContent = r.label;
+      if (r.min === min) b.className = "active";
+      host.appendChild(b);
+    });
+  }
+  function syncRange(sel, min) {
+    document.querySelectorAll(sel + " button").forEach((b) => b.classList.toggle("active", +b.dataset.min === min));
   }
 
   /* ------------------------------ Wire ----------------------------- */
@@ -792,6 +892,9 @@
   function closeModal() { $("#modalBackdrop").hidden = true; $("#projectForm").reset(); }
 
   function init() {
+    populateRange("#globalRange", globalMin);
+    populateRange("#detailRange", detailMin);
+
     $("#addProjectBtn").addEventListener("click", openModal);
     $("#emptyAddBtn").addEventListener("click", openModal);
     $("#cancelModal").addEventListener("click", closeModal);
@@ -807,22 +910,10 @@
     $("#brandHome").addEventListener("click", () => { if (currentId) closeDetail(); });
     $("#deleteProjectBtn").addEventListener("click", () => deleteProject(currentId));
 
-    $("#noteForm").addEventListener("submit", async (e) => {
+    $("#noteForm").addEventListener("submit", (e) => {
       e.preventDefault();
       const text = $("#noteInput").value.trim();
-      if (!text) return;
-      const p = state.projects.find((x) => x.id === currentId);
-      try {
-        let note;
-        if (REMOTE) {
-          const res = await api("/api/sites/" + p.id + "/notes", { method: "POST", body: JSON.stringify({ text }) });
-          note = res.note;
-        } else {
-          note = { id: uid(), text, ts: Date.now() };
-        }
-        p.notes.push(note);
-        save(); $("#noteInput").value = ""; renderNotes(p); toast("Note added");
-      } catch (err) { toast(err.status === 401 ? "Session expired — please unlock" : "Could not add note"); if (err.status === 401) logout(); }
+      if (text) addNote(text);
     });
 
     // login / logout
@@ -836,18 +927,22 @@
     if (profForm) profForm.addEventListener("submit", (e) => { e.preventDefault(); saveProfile(); });
 
     // range toggles
-    $("#globalRange").addEventListener("click", (e) => {
+    $("#globalRange").addEventListener("click", async (e) => {
       const b = e.target.closest("button"); if (!b) return;
-      globalDays = +b.dataset.days; syncRange("#globalRange", globalDays); renderDashboard();
+      globalMin = +b.dataset.min; syncRange("#globalRange", globalMin);
+      try { await loadOverview(); } catch (err) { if (err.status === 401) return logout(); }
+      renderDashboard();
     });
-    $("#detailRange").addEventListener("click", (e) => {
+    $("#detailRange").addEventListener("click", async (e) => {
       const b = e.target.closest("button"); if (!b) return;
-      detailDays = +b.dataset.days; syncRange("#detailRange", detailDays); renderDetail();
+      detailMin = +b.dataset.min; syncRange("#detailRange", detailMin);
+      try { await loadDetail(); } catch (err) { if (err.status === 401) return logout(); }
+      renderDetail();
     });
 
     // snippet
     $("#snippetBtn").addEventListener("click", () => {
-      const p = state.projects.find((x) => x.id === currentId);
+      const p = getProject(currentId);
       $("#snippetCode").textContent = snippetFor(p);
       $("#snippetBackdrop").hidden = false;
     });
@@ -857,9 +952,9 @@
       navigator.clipboard.writeText($("#snippetCode").textContent).then(() => toast("Snippet copied"));
     });
 
-    // export / import
+    // export / import (demo only — metadata + notes)
     $("#exportBtn").addEventListener("click", () => {
-      const blob = new Blob([JSON.stringify(state, null, 2)], { type: "application/json" });
+      const blob = new Blob([JSON.stringify({ projects: state.projects }, null, 2)], { type: "application/json" });
       const a = document.createElement("a");
       a.href = URL.createObjectURL(blob);
       a.download = `borealis-traffic-${new Date().toISOString().slice(0, 10)}.json`;
@@ -869,11 +964,15 @@
     $("#importFile").addEventListener("change", (e) => {
       const file = e.target.files[0]; if (!file) return;
       const reader = new FileReader();
-      reader.onload = () => {
+      reader.onload = async () => {
         try {
           const data = JSON.parse(reader.result);
           if (!data.projects) throw new Error("bad");
-          state = data; save(); closeDetail(); renderDashboard(); toast("Data imported");
+          state = { projects: data.projects };
+          demoEvents = genDemoEvents(state.projects);
+          save();
+          await loadOverview();
+          closeDetail(); toast("Data imported");
         } catch (err) { toast("Could not import file"); }
       };
       reader.readAsText(file);
