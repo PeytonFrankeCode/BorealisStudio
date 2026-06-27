@@ -132,5 +132,16 @@
 
   <script src="config.js"></script>
   <script src="landing.js"></script>
+
+  <!-- Borealis Software analytics — borealissoftwares.com -->
+  <script>
+  (function(){
+    var SITE_ID = "edb8c5ab";
+    var img = new Image();
+    img.src = "https://borealissoftwares.com/collect?site=" + SITE_ID +
+              "&path=" + encodeURIComponent(location.pathname) +
+              "&t=" + Date.now();
+  })();
+  </script>
 </body>
 </html>
