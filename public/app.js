@@ -7,6 +7,8 @@
 
   const STORE_KEY = "borealis.studio.v1";
   const TOKEN_KEY = "borealis.admin.token";
+  const TL_KEY = "borealis.timelogs.v1";  // demo-mode time logs
+  const TIMER_KEY = "borealis.timer.v1";  // an in-progress timer's start (survives refresh)
   const DAY = 86400000;
   const SVGNS = "http://www.w3.org/2000/svg";
 
@@ -64,6 +66,10 @@
   let authRequired = false;  // backend has an ADMIN_TOKEN configured
   let needLogin = false;     // logged out / wrong password
   let adminToken = "";
+  let timeLogs = [];         // completed stopwatch sessions
+  let timerStart = null;     // ms epoch of a running timer, or null
+  let timerTick = null;      // setInterval handle for the live stopwatch
+  let editingLogId = null;   // id of the log whose notes are being edited
 
   function load() {
     try {
@@ -101,6 +107,7 @@
           adminToken = localStorage.getItem(TOKEN_KEY) || "";
           try {
             await loadOverview();
+            await loadTimeLogs();
           } catch (e) {
             if (e.status === 401) { needLogin = true; overviewData = EMPTY; }
             else throw e;
@@ -112,6 +119,7 @@
     state = load();
     demoEvents = genDemoEvents(state.projects);
     await loadOverview();
+    await loadTimeLogs();
   }
 
   function authHeaders(extra) {
@@ -143,6 +151,19 @@
     if (currentId) await loadDetail();
   }
 
+  async function loadTimeLogs() {
+    if (REMOTE) {
+      const data = await api("/api/timelogs");
+      timeLogs = data.logs || [];
+    } else {
+      try { timeLogs = JSON.parse(localStorage.getItem(TL_KEY) || "[]"); } catch (e) { timeLogs = []; }
+    }
+  }
+  function saveTimeLogsLocal() {
+    if (REMOTE) return;
+    try { localStorage.setItem(TL_KEY, JSON.stringify(timeLogs)); } catch (e) {}
+  }
+
   function activeProjects() {
     if (currentId && detailData.projects.length) return detailData.projects;
     return overviewData.projects;
@@ -157,6 +178,7 @@
     adminToken = (pw || "").trim();
     try {
       await loadOverview();
+      await loadTimeLogs();
       localStorage.setItem(TOKEN_KEY, adminToken);
       needLogin = false;
       hideLogin();
@@ -173,6 +195,7 @@
     localStorage.removeItem(TOKEN_KEY);
     needLogin = true;
     overviewData = EMPTY;
+    timeLogs = [];
     if (currentId) closeDetail();
     renderDashboard();
     showLogin();
@@ -508,6 +531,7 @@
     }
 
     renderGeoInto($("#worldMap"), $("#geoList"), $("#geoChip"), overviewData.geo, globalMin);
+    renderTimeLog();
 
     const pg = $("#projectGrid");
     pg.innerHTML = "";
@@ -662,6 +686,159 @@
       </div>`;
     card.addEventListener("click", () => openDetail(p.id));
     return card;
+  }
+
+  /* --------------------------- Time log ---------------------------- */
+  function hms(sec) {
+    sec = Math.max(0, Math.floor(sec));
+    const h = Math.floor(sec / 3600), m = Math.floor((sec % 3600) / 60), s = sec % 60;
+    const p = (n) => String(n).padStart(2, "0");
+    return p(h) + ":" + p(m) + ":" + p(s);
+  }
+  function fmtClock(ms) { return new Date(ms).toLocaleTimeString([], { hour: "numeric", minute: "2-digit" }); }
+  function humanDuration(sec) {
+    sec = Math.max(0, Math.round(sec));
+    const h = Math.floor(sec / 3600), m = Math.floor((sec % 3600) / 60), s = sec % 60;
+    if (h > 0) return h + "h" + (m ? " " + m + "m" : "");
+    if (m > 0) return m + "m" + (s ? " " + s + "s" : "");
+    return s + "s";
+  }
+
+  function updateStopwatch() {
+    const disp = $("#timerDisplay");
+    if (!disp || timerStart == null) return;
+    disp.textContent = hms((Date.now() - timerStart) / 1000);
+  }
+  function startTick() { stopTick(); timerTick = setInterval(updateStopwatch, 250); updateStopwatch(); }
+  function stopTick() { if (timerTick) { clearInterval(timerTick); timerTick = null; } }
+
+  function startTimer() {
+    timerStart = Date.now();
+    try { localStorage.setItem(TIMER_KEY, String(timerStart)); } catch (e) {}
+    startTick();
+    renderTimeLog();
+  }
+
+  async function stopTimer() {
+    if (timerStart == null) return;
+    const start = timerStart, end = Date.now();
+    const seconds = Math.max(0, Math.round((end - start) / 1000));
+    try {
+      let log;
+      if (REMOTE) {
+        const res = await api("/api/timelogs", { method: "POST", body: JSON.stringify({ start, end }) });
+        log = res.log;
+      } else {
+        log = { id: uid(), start, end, seconds, notes: "", created: Date.now() };
+      }
+      timeLogs.unshift(log);
+      saveTimeLogsLocal();
+      timerStart = null;
+      try { localStorage.removeItem(TIMER_KEY); } catch (e) {}
+      stopTick();
+      editingLogId = log.id;   // open the notes field so you can jot it down now
+      renderTimeLog();
+      focusNotesInput();
+      toast("Logged " + humanDuration(seconds));
+    } catch (err) {
+      if (err.status === 401) logout();
+      else toast("Could not save — timer still running");
+    }
+  }
+
+  function focusNotesInput() {
+    requestAnimationFrame(() => {
+      const ta = document.querySelector(".tl-notes-input");
+      if (ta) { ta.focus(); ta.setSelectionRange(ta.value.length, ta.value.length); }
+    });
+  }
+
+  async function saveLogNotes(id, notes) {
+    const log = timeLogs.find((l) => l.id === id);
+    if (!log) return;
+    try {
+      if (REMOTE) await api("/api/timelogs/" + id, { method: "PATCH", body: JSON.stringify({ notes }) });
+      log.notes = notes;
+      saveTimeLogsLocal();
+      editingLogId = null;
+      renderTimeLog();
+      toast("Notes saved");
+    } catch (err) {
+      if (err.status === 401) logout();
+      else toast("Could not save notes");
+    }
+  }
+
+  async function removeTimeLog(id) {
+    if (!confirm("Delete this time log entry?")) return;
+    try {
+      if (REMOTE) await api("/api/timelogs/" + id, { method: "DELETE" });
+      timeLogs = timeLogs.filter((l) => l.id !== id);
+      saveTimeLogsLocal();
+      if (editingLogId === id) editingLogId = null;
+      renderTimeLog();
+      toast("Entry deleted");
+    } catch (err) {
+      if (err.status === 401) logout();
+      else toast("Could not delete entry");
+    }
+  }
+
+  function renderTimeLog() {
+    const disp = $("#timerDisplay");
+    const meta = $("#timerMeta");
+    const btn = $("#timerToggle");
+    const chip = $("#timeTotalChip");
+    const list = $("#timeLogList");
+    if (!disp || !btn || !list) return;
+
+    const running = timerStart != null;
+    btn.textContent = running ? "Stop" : "Start";
+    btn.classList.toggle("running", running);
+    disp.classList.toggle("running", running);
+    if (meta) meta.textContent = running ? "Started " + fmtClock(timerStart) : "Not running";
+    if (running) updateStopwatch(); else disp.textContent = "00:00:00";
+
+    const today = startOfDay(Date.now());
+    const todaySec = timeLogs.filter((l) => l.start >= today).reduce((a, l) => a + l.seconds, 0);
+    if (chip) chip.textContent = timeLogs.length
+      ? "Today: " + humanDuration(todaySec) + " · " + timeLogs.length + " session" + (timeLogs.length === 1 ? "" : "s")
+      : "";
+
+    list.innerHTML = "";
+    if (!timeLogs.length) {
+      list.appendChild(el("li", "tl-empty", "No time logged yet — press Start to begin."));
+      return;
+    }
+    timeLogs.forEach((l) => {
+      const li = el("li", "timelog-item");
+      const range = fmtClock(l.start) + " – " + fmtClock(l.end);
+      let notesHtml;
+      if (editingLogId === l.id) {
+        notesHtml = '<div class="tl-notes-edit">' +
+          '<textarea class="tl-notes-input" rows="2" placeholder="What did you work on?">' + escapeHtml(l.notes || "") + '</textarea>' +
+          '<div class="tl-notes-actions"><button class="btn ghost tl-cancel">Cancel</button><button class="btn primary tl-save">Save</button></div></div>';
+      } else if (l.notes) {
+        notesHtml = '<div class="tl-notes"><span class="tl-notes-text">' + escapeHtml(l.notes) + '</span><button class="tl-edit">Edit</button></div>';
+      } else {
+        notesHtml = '<button class="tl-add">＋ Add notes</button>';
+      }
+      li.innerHTML =
+        '<div class="tl-head"><div class="tl-range">' + escapeHtml(range) + '</div>' +
+        '<span class="tl-dur">' + escapeHtml(humanDuration(l.seconds)) + '</span>' +
+        '<button class="tl-del" title="Delete">✕</button></div>' + notesHtml;
+
+      li.querySelector(".tl-del").addEventListener("click", () => removeTimeLog(l.id));
+      const addBtn = li.querySelector(".tl-add");
+      if (addBtn) addBtn.addEventListener("click", () => { editingLogId = l.id; renderTimeLog(); focusNotesInput(); });
+      const editBtn = li.querySelector(".tl-edit");
+      if (editBtn) editBtn.addEventListener("click", () => { editingLogId = l.id; renderTimeLog(); focusNotesInput(); });
+      const saveBtn = li.querySelector(".tl-save");
+      if (saveBtn) saveBtn.addEventListener("click", () => saveLogNotes(l.id, li.querySelector(".tl-notes-input").value.trim()));
+      const cancelBtn = li.querySelector(".tl-cancel");
+      if (cancelBtn) cancelBtn.addEventListener("click", () => { editingLogId = null; renderTimeLog(); });
+      list.appendChild(li);
+    });
   }
 
   /* ---------------------------- Detail ----------------------------- */
@@ -910,6 +1087,9 @@
     $("#brandHome").addEventListener("click", () => { if (currentId) closeDetail(); });
     $("#deleteProjectBtn").addEventListener("click", () => deleteProject(currentId));
 
+    // time log stopwatch
+    $("#timerToggle").addEventListener("click", () => { timerStart == null ? startTimer() : stopTimer(); });
+
     $("#noteForm").addEventListener("submit", (e) => {
       e.preventDefault();
       const text = $("#noteInput").value.trim();
@@ -999,6 +1179,12 @@
       chip.title = "Running on demo data in this browser. Deploy the Worker for real tracking.";
       if (lockBtn) lockBtn.style.display = "none";
     }
+
+    // Resume a timer that was left running before a refresh/close.
+    try {
+      const saved = parseInt(localStorage.getItem(TIMER_KEY) || "", 10);
+      if (saved && !isNaN(saved) && saved <= Date.now()) { timerStart = saved; startTick(); }
+    } catch (e) { /* ignore */ }
 
     renderDashboard();
     if (needLogin) showLogin();

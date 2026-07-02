@@ -32,3 +32,13 @@ CREATE TABLE IF NOT EXISTS notes (
   ts      INTEGER NOT NULL
 );
 CREATE INDEX IF NOT EXISTS idx_notes_site ON notes (site_id);
+
+-- Personal time-tracking log (stopwatch sessions), not tied to a site.
+CREATE TABLE IF NOT EXISTS time_logs (
+  id      TEXT PRIMARY KEY,
+  start   INTEGER NOT NULL,        -- ms epoch when the timer started
+  end     INTEGER NOT NULL,        -- ms epoch when it stopped
+  seconds INTEGER NOT NULL,        -- total elapsed seconds
+  notes   TEXT NOT NULL DEFAULT '',
+  created INTEGER NOT NULL
+);
