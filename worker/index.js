@@ -82,6 +82,13 @@ export default {
       if ((m = pathname.match(/^\/api\/notes\/([^/]+)$/)) && request.method === "DELETE")
         return deleteNote(m[1], env, cors);
 
+      if (pathname === "/api/timelogs" && request.method === "GET") return listTimeLogs(env, cors);
+      if (pathname === "/api/timelogs" && request.method === "POST") return createTimeLog(request, env, cors);
+      if ((m = pathname.match(/^\/api\/timelogs\/([^/]+)$/)) && request.method === "PATCH")
+        return updateTimeLog(m[1], request, env, cors);
+      if ((m = pathname.match(/^\/api\/timelogs\/([^/]+)$/)) && request.method === "DELETE")
+        return deleteTimeLog(m[1], env, cors);
+
       return json({ error: "not found" }, cors, 404);
     } catch (e) {
       return json({ error: String((e && e.message) || e) }, cors, 500);
@@ -300,6 +307,41 @@ async function deleteNote(id, env, cors) {
   return json({ ok: true }, cors);
 }
 
+/* ----------------------------- Time logs ---------------------------- */
+async function listTimeLogs(env, cors) {
+  const rows = (await env.DB.prepare(
+    "SELECT id, start, end, seconds, notes, created FROM time_logs ORDER BY start DESC LIMIT 500"
+  ).all()).results || [];
+  return json({ logs: rows.map((r) => ({ id: r.id, start: r.start, end: r.end, seconds: r.seconds, notes: r.notes || "", created: r.created })) }, cors);
+}
+
+async function createTimeLog(request, env, cors) {
+  const body = await readJson(request);
+  const start = parseInt(body.start, 10);
+  const end = parseInt(body.end, 10);
+  if (!start || !end || end < start) return json({ error: "valid start and end are required" }, cors, 400);
+  const seconds = Math.max(0, Math.round((end - start) / 1000));
+  const notes = clip(String(body.notes || ""), 4000);
+  const id = crypto.randomUUID().slice(0, 8);
+  const created = Date.now();
+  await env.DB.prepare(
+    "INSERT INTO time_logs (id, start, end, seconds, notes, created) VALUES (?,?,?,?,?,?)"
+  ).bind(id, start, end, seconds, notes, created).run();
+  return json({ log: { id, start, end, seconds, notes, created } }, cors, 201);
+}
+
+async function updateTimeLog(id, request, env, cors) {
+  const body = await readJson(request);
+  if (body.notes == null) return json({ error: "no fields to update" }, cors, 400);
+  await env.DB.prepare("UPDATE time_logs SET notes = ? WHERE id = ?").bind(clip(String(body.notes), 4000), id).run();
+  return json({ ok: true }, cors);
+}
+
+async function deleteTimeLog(id, env, cors) {
+  await env.DB.prepare("DELETE FROM time_logs WHERE id = ?").bind(id).run();
+  return json({ ok: true }, cors);
+}
+
 /* ------------------------------ Helpers ----------------------------- */
 
 async function ensureSchema(env) {
@@ -323,6 +365,11 @@ async function ensureSchema(env) {
       "text TEXT NOT NULL, ts INTEGER NOT NULL)"
     ),
     env.DB.prepare("CREATE INDEX IF NOT EXISTS idx_notes_site ON notes (site_id)"),
+    env.DB.prepare(
+      "CREATE TABLE IF NOT EXISTS time_logs (id TEXT PRIMARY KEY, start INTEGER NOT NULL, " +
+      "end INTEGER NOT NULL, seconds INTEGER NOT NULL, notes TEXT NOT NULL DEFAULT '', " +
+      "created INTEGER NOT NULL)"
+    ),
   ]);
   // Best-effort migrations for databases created before the public fields existed.
   for (const col of [
