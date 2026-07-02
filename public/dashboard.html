@@ -70,21 +70,6 @@
         </div>
       </div>
 
-      <div class="panel time-panel" id="timePanel">
-        <div class="panel-head">
-          <h2>Time log</h2>
-          <span class="muted" id="timeTotalChip"></span>
-        </div>
-        <div class="timer-row">
-          <div class="timer-clock">
-            <div class="timer-display" id="timerDisplay">00:00:00</div>
-            <div class="timer-meta muted" id="timerMeta">Not running</div>
-          </div>
-          <button class="btn primary timer-btn" id="timerToggle">Start</button>
-        </div>
-        <ul class="timelog-list" id="timeLogList"></ul>
-      </div>
-
       <div class="section-head">
         <h2>Your sites</h2>
         <span class="muted" id="projectCount"></span>
@@ -168,6 +153,21 @@
             <button type="submit" class="btn primary">Save public profile</button>
           </div>
         </form>
+      </div>
+
+      <div class="panel time-panel" id="timePanelDetail">
+        <div class="panel-head">
+          <h2>Time log</h2>
+          <span class="muted" id="timeTotalChip"></span>
+        </div>
+        <div class="timer-row">
+          <div class="timer-clock">
+            <div class="timer-display" id="timerDisplay" data-timer-display="">00:00:00</div>
+            <div class="timer-meta muted" id="timerMeta">Not running</div>
+          </div>
+          <button class="btn primary timer-btn" id="timerToggle">Start</button>
+        </div>
+        <ul class="timelog-list" id="timeLogList"></ul>
       </div>
 
       <div class="detail-columns">
