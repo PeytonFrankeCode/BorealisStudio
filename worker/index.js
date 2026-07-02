@@ -310,13 +310,14 @@ async function deleteNote(id, env, cors) {
 /* ----------------------------- Time logs ---------------------------- */
 async function listTimeLogs(env, cors) {
   const rows = (await env.DB.prepare(
-    "SELECT id, start, end, seconds, notes, created FROM time_logs ORDER BY start DESC LIMIT 500"
+    "SELECT id, site_id, start, end, seconds, notes, created FROM time_logs ORDER BY start DESC LIMIT 1000"
   ).all()).results || [];
-  return json({ logs: rows.map((r) => ({ id: r.id, start: r.start, end: r.end, seconds: r.seconds, notes: r.notes || "", created: r.created })) }, cors);
+  return json({ logs: rows.map((r) => ({ id: r.id, site: r.site_id || "", start: r.start, end: r.end, seconds: r.seconds, notes: r.notes || "", created: r.created })) }, cors);
 }
 
 async function createTimeLog(request, env, cors) {
   const body = await readJson(request);
+  const site = clip(String(body.site || ""), 32);
   const start = parseInt(body.start, 10);
   const end = parseInt(body.end, 10);
   if (!start || !end || end < start) return json({ error: "valid start and end are required" }, cors, 400);
@@ -325,9 +326,9 @@ async function createTimeLog(request, env, cors) {
   const id = crypto.randomUUID().slice(0, 8);
   const created = Date.now();
   await env.DB.prepare(
-    "INSERT INTO time_logs (id, start, end, seconds, notes, created) VALUES (?,?,?,?,?,?)"
-  ).bind(id, start, end, seconds, notes, created).run();
-  return json({ log: { id, start, end, seconds, notes, created } }, cors, 201);
+    "INSERT INTO time_logs (id, site_id, start, end, seconds, notes, created) VALUES (?,?,?,?,?,?,?)"
+  ).bind(id, site, start, end, seconds, notes, created).run();
+  return json({ log: { id, site, start, end, seconds, notes, created } }, cors, 201);
 }
 
 async function updateTimeLog(id, request, env, cors) {
@@ -366,9 +367,9 @@ async function ensureSchema(env) {
     ),
     env.DB.prepare("CREATE INDEX IF NOT EXISTS idx_notes_site ON notes (site_id)"),
     env.DB.prepare(
-      "CREATE TABLE IF NOT EXISTS time_logs (id TEXT PRIMARY KEY, start INTEGER NOT NULL, " +
-      "end INTEGER NOT NULL, seconds INTEGER NOT NULL, notes TEXT NOT NULL DEFAULT '', " +
-      "created INTEGER NOT NULL)"
+      "CREATE TABLE IF NOT EXISTS time_logs (id TEXT PRIMARY KEY, site_id TEXT NOT NULL DEFAULT '', " +
+      "start INTEGER NOT NULL, end INTEGER NOT NULL, seconds INTEGER NOT NULL, " +
+      "notes TEXT NOT NULL DEFAULT '', created INTEGER NOT NULL)"
     ),
   ]);
   // Best-effort migrations for databases created before the public fields existed.
@@ -382,6 +383,8 @@ async function ensureSchema(env) {
   for (const col of ["country TEXT NOT NULL DEFAULT ''", "city TEXT NOT NULL DEFAULT ''", "lat REAL", "lon REAL"]) {
     try { await env.DB.prepare("ALTER TABLE events ADD COLUMN " + col).run(); } catch (e) { /* exists */ }
   }
+  // ...and for time logs created before they were tied to a site.
+  try { await env.DB.prepare("ALTER TABLE time_logs ADD COLUMN site_id TEXT NOT NULL DEFAULT ''").run(); } catch (e) { /* exists */ }
   schemaReady = true;
 }
 

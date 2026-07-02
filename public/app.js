@@ -66,8 +66,9 @@
   let authRequired = false;  // backend has an ADMIN_TOKEN configured
   let needLogin = false;     // logged out / wrong password
   let adminToken = "";
-  let timeLogs = [];         // completed stopwatch sessions
+  let timeLogs = [];         // completed stopwatch sessions (each tied to a site)
   let timerStart = null;     // ms epoch of a running timer, or null
+  let timerSite = null;      // site id the running timer is tracking
   let timerTick = null;      // setInterval handle for the live stopwatch
   let editingLogId = null;   // id of the log whose notes are being edited
 
@@ -531,7 +532,6 @@
     }
 
     renderGeoInto($("#worldMap"), $("#geoList"), $("#geoChip"), overviewData.geo, globalMin);
-    renderTimeLog();
 
     const pg = $("#projectGrid");
     pg.innerHTML = "";
@@ -666,6 +666,8 @@
   function projectCard(p) {
     const visitors = p.totals ? p.totals.visitors : 0;
     const views = p.totals ? p.totals.views : 0;
+    const tracked = hoursLabel(siteSeconds(p.id));
+    const tracking = timerSite === p.id;
     const card = el("div", "project-card");
     card.innerHTML = `
       <div class="pc-head">
@@ -678,11 +680,12 @@
       <div class="pc-stats">
         <div><div class="n">${fmt(visitors)}</div><div class="l">Visitors</div></div>
         <div><div class="n">${fmt(views)}</div><div class="l">Pageviews</div></div>
+        <div><div class="n">${tracked}</div><div class="l">Tracked</div></div>
       </div>
       <canvas class="spark" id="spark-${p.id}"></canvas>
       <div class="pc-foot">
         <span>${p.notes.length} note${p.notes.length === 1 ? "" : "s"}${p.public ? " · public" : ""}</span>
-        <span class="badge">${rangeShort(globalMin)}</span>
+        ${tracking ? '<span class="pc-tracking">● tracking</span>' : `<span class="badge">${rangeShort(globalMin)}</span>`}
       </div>`;
     card.addEventListener("click", () => openDetail(p.id));
     return card;
@@ -704,42 +707,79 @@
     return s + "s";
   }
 
+  // Compact "total tracked" label for a site (used on project cards).
+  function siteSeconds(siteId) {
+    return timeLogs.reduce((a, l) => a + (l.site === siteId ? l.seconds : 0), 0);
+  }
+  function hoursLabel(sec) {
+    if (sec < 60) return "0h";
+    if (sec < 3600) return Math.round(sec / 60) + "m";
+    return (sec / 3600).toFixed(1).replace(/\.0$/, "") + "h";
+  }
+
   function updateStopwatch() {
-    const disp = $("#timerDisplay");
-    if (!disp || timerStart == null) return;
-    disp.textContent = hms((Date.now() - timerStart) / 1000);
+    // Only the display belonging to the site currently being timed should tick.
+    if (timerStart == null) return;
+    const txt = hms((Date.now() - timerStart) / 1000);
+    document.querySelectorAll('[data-timer-display="' + timerSite + '"]').forEach((e) => { e.textContent = txt; });
   }
   function startTick() { stopTick(); timerTick = setInterval(updateStopwatch, 250); updateStopwatch(); }
   function stopTick() { if (timerTick) { clearInterval(timerTick); timerTick = null; } }
 
-  function startTimer() {
-    timerStart = Date.now();
-    try { localStorage.setItem(TIMER_KEY, String(timerStart)); } catch (e) {}
-    startTick();
-    renderTimeLog();
+  function persistTimer() {
+    try { localStorage.setItem(TIMER_KEY, JSON.stringify({ start: timerStart, site: timerSite })); } catch (e) {}
+  }
+
+  // Save the running timer as an entry and clear it. Returns the new log or null.
+  async function finalizeTimer() {
+    if (timerStart == null) return null;
+    const site = timerSite, start = timerStart, end = Date.now();
+    const log = await createTimeLogEntry(site, start, end);
+    timerStart = null; timerSite = null;
+    try { localStorage.removeItem(TIMER_KEY); } catch (e) {}
+    stopTick();
+    return log;
+  }
+
+  async function createTimeLogEntry(site, start, end) {
+    const seconds = Math.max(0, Math.round((end - start) / 1000));
+    let log;
+    if (REMOTE) {
+      const res = await api("/api/timelogs", { method: "POST", body: JSON.stringify({ site, start, end }) });
+      log = res.log;
+    } else {
+      log = { id: uid(), site, start, end, seconds, notes: "", created: Date.now() };
+    }
+    timeLogs.unshift(log);
+    saveTimeLogsLocal();
+    return log;
+  }
+
+  async function startTimerForSite(siteId) {
+    try {
+      if (timerStart != null) {
+        if (timerSite === siteId) return;   // already timing this site
+        await finalizeTimer();              // switch: bank the current session first
+      }
+      timerStart = Date.now(); timerSite = siteId;
+      persistTimer();
+      startTick();
+      currentId === siteId ? renderDetail() : renderDashboard();
+    } catch (err) {
+      if (err.status === 401) logout();
+      else toast("Could not start timer");
+    }
   }
 
   async function stopTimer() {
     if (timerStart == null) return;
-    const start = timerStart, end = Date.now();
-    const seconds = Math.max(0, Math.round((end - start) / 1000));
     try {
-      let log;
-      if (REMOTE) {
-        const res = await api("/api/timelogs", { method: "POST", body: JSON.stringify({ start, end }) });
-        log = res.log;
-      } else {
-        log = { id: uid(), start, end, seconds, notes: "", created: Date.now() };
-      }
-      timeLogs.unshift(log);
-      saveTimeLogsLocal();
-      timerStart = null;
-      try { localStorage.removeItem(TIMER_KEY); } catch (e) {}
-      stopTick();
-      editingLogId = log.id;   // open the notes field so you can jot it down now
-      renderTimeLog();
-      focusNotesInput();
-      toast("Logged " + humanDuration(seconds));
+      const log = await finalizeTimer();
+      if (!log) return;
+      editingLogId = log.id;               // open the notes field so you can jot it down now
+      if (currentId === log.site) { renderDetail(); focusNotesInput(); }
+      else { openDetail(log.site); focusNotesInput(); }
+      toast("Logged " + humanDuration(log.seconds));
     } catch (err) {
       if (err.status === 401) logout();
       else toast("Could not save — timer still running");
@@ -761,7 +801,7 @@
       log.notes = notes;
       saveTimeLogsLocal();
       editingLogId = null;
-      renderTimeLog();
+      renderSiteTimeLog();
       toast("Notes saved");
     } catch (err) {
       if (err.status === 401) logout();
@@ -776,7 +816,7 @@
       timeLogs = timeLogs.filter((l) => l.id !== id);
       saveTimeLogsLocal();
       if (editingLogId === id) editingLogId = null;
-      renderTimeLog();
+      renderSiteTimeLog();
       toast("Entry deleted");
     } catch (err) {
       if (err.status === 401) logout();
@@ -784,33 +824,35 @@
     }
   }
 
-  function renderTimeLog() {
+  // Renders the time log inside the detail view, scoped to the current site.
+  function renderSiteTimeLog() {
     const disp = $("#timerDisplay");
     const meta = $("#timerMeta");
     const btn = $("#timerToggle");
     const chip = $("#timeTotalChip");
     const list = $("#timeLogList");
-    if (!disp || !btn || !list) return;
+    if (!disp || !btn || !list || !currentId) return;
 
-    const running = timerStart != null;
+    if (disp.dataset) disp.dataset.timerDisplay = currentId; // so ticks target this display
+    const running = timerStart != null && timerSite === currentId;
     btn.textContent = running ? "Stop" : "Start";
     btn.classList.toggle("running", running);
     disp.classList.toggle("running", running);
     if (meta) meta.textContent = running ? "Started " + fmtClock(timerStart) : "Not running";
     if (running) updateStopwatch(); else disp.textContent = "00:00:00";
 
-    const today = startOfDay(Date.now());
-    const todaySec = timeLogs.filter((l) => l.start >= today).reduce((a, l) => a + l.seconds, 0);
-    if (chip) chip.textContent = timeLogs.length
-      ? "Today: " + humanDuration(todaySec) + " · " + timeLogs.length + " session" + (timeLogs.length === 1 ? "" : "s")
+    const logs = timeLogs.filter((l) => l.site === currentId);
+    const totalSec = logs.reduce((a, l) => a + l.seconds, 0);
+    if (chip) chip.textContent = logs.length
+      ? "Total: " + humanDuration(totalSec) + " · " + logs.length + " session" + (logs.length === 1 ? "" : "s")
       : "";
 
     list.innerHTML = "";
-    if (!timeLogs.length) {
-      list.appendChild(el("li", "tl-empty", "No time logged yet — press Start to begin."));
+    if (!logs.length) {
+      list.appendChild(el("li", "tl-empty", "No time logged for this site yet — press Start to begin."));
       return;
     }
-    timeLogs.forEach((l) => {
+    logs.forEach((l) => {
       const li = el("li", "timelog-item");
       const range = fmtClock(l.start) + " – " + fmtClock(l.end);
       let notesHtml;
@@ -830,13 +872,13 @@
 
       li.querySelector(".tl-del").addEventListener("click", () => removeTimeLog(l.id));
       const addBtn = li.querySelector(".tl-add");
-      if (addBtn) addBtn.addEventListener("click", () => { editingLogId = l.id; renderTimeLog(); focusNotesInput(); });
+      if (addBtn) addBtn.addEventListener("click", () => { editingLogId = l.id; renderSiteTimeLog(); focusNotesInput(); });
       const editBtn = li.querySelector(".tl-edit");
-      if (editBtn) editBtn.addEventListener("click", () => { editingLogId = l.id; renderTimeLog(); focusNotesInput(); });
+      if (editBtn) editBtn.addEventListener("click", () => { editingLogId = l.id; renderSiteTimeLog(); focusNotesInput(); });
       const saveBtn = li.querySelector(".tl-save");
       if (saveBtn) saveBtn.addEventListener("click", () => saveLogNotes(l.id, li.querySelector(".tl-notes-input").value.trim()));
       const cancelBtn = li.querySelector(".tl-cancel");
-      if (cancelBtn) cancelBtn.addEventListener("click", () => { editingLogId = null; renderTimeLog(); });
+      if (cancelBtn) cancelBtn.addEventListener("click", () => { editingLogId = null; renderSiteTimeLog(); });
       list.appendChild(li);
     });
   }
@@ -890,6 +932,7 @@
     };
     renderGeoInto($("#worldMapDetail"), $("#geoListDetail"), $("#geoChipDetail"), dgeo, detailMin);
 
+    renderSiteTimeLog();
     renderNotes(p);
     renderTopPages(p);
     renderProfile(p);
@@ -1087,8 +1130,11 @@
     $("#brandHome").addEventListener("click", () => { if (currentId) closeDetail(); });
     $("#deleteProjectBtn").addEventListener("click", () => deleteProject(currentId));
 
-    // time log stopwatch
-    $("#timerToggle").addEventListener("click", () => { timerStart == null ? startTimer() : stopTimer(); });
+    // time log stopwatch (scoped to the open site)
+    $("#timerToggle").addEventListener("click", () => {
+      if (!currentId) return;
+      (timerStart != null && timerSite === currentId) ? stopTimer() : startTimerForSite(currentId);
+    });
 
     $("#noteForm").addEventListener("submit", (e) => {
       e.preventDefault();
@@ -1182,8 +1228,13 @@
 
     // Resume a timer that was left running before a refresh/close.
     try {
-      const saved = parseInt(localStorage.getItem(TIMER_KEY) || "", 10);
-      if (saved && !isNaN(saved) && saved <= Date.now()) { timerStart = saved; startTick(); }
+      const saved = JSON.parse(localStorage.getItem(TIMER_KEY) || "null");
+      const start = saved && typeof saved === "object" ? saved.start : saved; // legacy: bare number
+      if (start && start <= Date.now()) {
+        timerStart = start;
+        timerSite = (saved && typeof saved === "object") ? (saved.site || null) : null;
+        startTick();
+      }
     } catch (e) { /* ignore */ }
 
     renderDashboard();
