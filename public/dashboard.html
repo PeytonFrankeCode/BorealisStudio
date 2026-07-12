@@ -158,7 +158,10 @@
       <div class="panel time-panel" id="timePanelDetail">
         <div class="panel-head">
           <h2>Time log</h2>
-          <span class="muted" id="timeTotalChip"></span>
+          <div class="panel-head-actions">
+            <span class="muted" id="timeTotalChip"></span>
+            <button class="btn ghost btn-sm" id="addTimeBtn">＋ Add manually</button>
+          </div>
         </div>
         <div class="timer-row">
           <div class="timer-clock">
@@ -167,6 +170,23 @@
           </div>
           <button class="btn primary timer-btn" id="timerToggle">Start</button>
         </div>
+        <form class="manual-time" id="manualTimeForm" hidden>
+          <div class="mt-fields">
+            <label>Start
+              <input type="datetime-local" id="mtStart" required />
+            </label>
+            <label>End
+              <input type="datetime-local" id="mtEnd" required />
+            </label>
+          </div>
+          <label>Notes <small>(optional)</small>
+            <textarea id="mtNotes" rows="2" placeholder="What did you work on?"></textarea>
+          </label>
+          <div class="mt-actions">
+            <button type="button" class="btn ghost" id="mtCancel">Cancel</button>
+            <button type="submit" class="btn primary">Add entry</button>
+          </div>
+        </form>
         <ul class="timelog-list" id="timeLogList"></ul>
       </div>
 

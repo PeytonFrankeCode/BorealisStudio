@@ -226,6 +226,17 @@ h2 { font-size: 16px; margin: 0; }
 .tl-notes-input { width: 100%; resize: vertical; font: inherit; font-size: 14px; color: var(--text); background: rgba(255,255,255,0.04); border: 1px solid var(--border); border-radius: 10px; padding: 10px 12px; }
 .tl-notes-actions { display: flex; justify-content: flex-end; gap: 10px; margin-top: 8px; }
 .tl-empty { color: var(--muted); font-size: 14px; padding: 8px 0; }
+.panel-head-actions { display: flex; align-items: center; gap: 12px; }
+.btn-sm { padding: 6px 12px; font-size: 13px; }
+.manual-time { border-bottom: 1px solid var(--border); padding-bottom: 16px; margin-bottom: 8px; }
+.manual-time label { display: block; font-size: 13px; font-weight: 600; color: var(--muted); margin-bottom: 12px; }
+.manual-time label small { font-weight: 500; opacity: 0.8; }
+.mt-fields { display: grid; grid-template-columns: 1fr 1fr; gap: 14px; }
+.manual-time input, .manual-time textarea { width: 100%; margin-top: 6px; font: inherit; font-size: 14px; color: var(--text); background: rgba(255,255,255,0.04); border: 1px solid var(--border); border-radius: 10px; padding: 10px 12px; }
+.manual-time textarea { resize: vertical; }
+.manual-time input[type="datetime-local"] { color-scheme: dark; }
+.mt-actions { display: flex; justify-content: flex-end; gap: 10px; }
+@media (max-width: 560px) { .mt-fields { grid-template-columns: 1fr; } }
 
 /* Public profile editor */
 .public-badge { font-size: 11px; font-weight: 700; padding: 3px 10px; border-radius: 20px; color: var(--muted); border: 1px solid var(--border); align-self: center; }

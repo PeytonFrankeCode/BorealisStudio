@@ -741,19 +741,48 @@
     return log;
   }
 
-  async function createTimeLogEntry(site, start, end) {
+  async function createTimeLogEntry(site, start, end, notes) {
+    notes = notes || "";
     const seconds = Math.max(0, Math.round((end - start) / 1000));
     let log;
     if (REMOTE) {
-      const res = await api("/api/timelogs", { method: "POST", body: JSON.stringify({ site, start, end }) });
+      const res = await api("/api/timelogs", { method: "POST", body: JSON.stringify({ site, start, end, notes }) });
       log = res.log;
     } else {
-      log = { id: uid(), site, start, end, seconds, notes: "", created: Date.now() };
+      log = { id: uid(), site, start, end, seconds, notes, created: Date.now() };
     }
     timeLogs.unshift(log);
     saveTimeLogsLocal();
     return log;
   }
+
+  // Manually add a completed session (no stopwatch) to the current site.
+  async function addManualTime(startMs, endMs, notes) {
+    try {
+      const log = await createTimeLogEntry(currentId, startMs, endMs, notes);
+      renderSiteTimeLog();
+      toast("Added " + humanDuration(log.seconds));
+    } catch (err) {
+      if (err.status === 401) logout();
+      else toast("Could not add time");
+    }
+  }
+
+  // Local ms -> value for a <input type="datetime-local"> (YYYY-MM-DDThh:mm).
+  function toLocalInputValue(ms) {
+    const d = new Date(ms), p = (n) => String(n).padStart(2, "0");
+    return d.getFullYear() + "-" + p(d.getMonth() + 1) + "-" + p(d.getDate()) + "T" + p(d.getHours()) + ":" + p(d.getMinutes());
+  }
+  function showManualForm() {
+    const f = $("#manualTimeForm");
+    if (!f) return;
+    $("#mtStart").value = toLocalInputValue(Date.now() - 3600000); // default: an hour ago
+    $("#mtEnd").value = toLocalInputValue(Date.now());
+    $("#mtNotes").value = "";
+    f.hidden = false;
+    $("#mtStart").focus();
+  }
+  function hideManualForm() { const f = $("#manualTimeForm"); if (f) f.hidden = true; }
 
   async function startTimerForSite(siteId) {
     try {
@@ -841,7 +870,7 @@
     if (meta) meta.textContent = running ? "Started " + fmtClock(timerStart) : "Not running";
     if (running) updateStopwatch(); else disp.textContent = "00:00:00";
 
-    const logs = timeLogs.filter((l) => l.site === currentId);
+    const logs = timeLogs.filter((l) => l.site === currentId).sort((a, b) => b.start - a.start);
     const totalSec = logs.reduce((a, l) => a + l.seconds, 0);
     if (chip) chip.textContent = logs.length
       ? "Total: " + humanDuration(totalSec) + " · " + logs.length + " session" + (logs.length === 1 ? "" : "s")
@@ -887,6 +916,8 @@
   function openDetail(id) {
     currentId = id; detailMin = globalMin;
     detailData = overviewData; // same window — reuse without an extra fetch
+    editingLogId = null;
+    hideManualForm();
     syncRange("#detailRange", detailMin);
     $("#dashboardView").hidden = true;
     $("#detailView").hidden = false;
@@ -1134,6 +1165,22 @@
     $("#timerToggle").addEventListener("click", () => {
       if (!currentId) return;
       (timerStart != null && timerSite === currentId) ? stopTimer() : startTimerForSite(currentId);
+    });
+    // manual time entry
+    $("#addTimeBtn").addEventListener("click", () => {
+      const f = $("#manualTimeForm");
+      f.hidden ? showManualForm() : hideManualForm();
+    });
+    $("#mtCancel").addEventListener("click", hideManualForm);
+    $("#manualTimeForm").addEventListener("submit", (e) => {
+      e.preventDefault();
+      const s = Date.parse($("#mtStart").value);
+      const en = Date.parse($("#mtEnd").value);
+      if (isNaN(s) || isNaN(en)) return toast("Enter a start and end time");
+      if (en <= s) return toast("End time must be after the start time");
+      if (en > Date.now() + 60000) return toast("End time can't be in the future");
+      addManualTime(s, en, $("#mtNotes").value.trim());
+      hideManualForm();
     });
 
     $("#noteForm").addEventListener("submit", (e) => {
