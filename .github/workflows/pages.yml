@@ -1,7 +1,7 @@
 name: Deploy to GitHub Pages
 
 # OPTIONAL preview only. The production site runs entirely on Cloudflare (see
-# deploy.yml), so this workflow is manual-only — run it from the Actions tab if
+# deploy.yml), so this workflow is manual-only; run it from the Actions tab if
 # you ever want a static, demo-data preview on GitHub Pages.
 
 on:

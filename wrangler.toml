@@ -12,7 +12,7 @@ binding = "ASSETS"
 
 # D1 database binding. Because the build runs `wrangler deploy`, the binding must
 # live here (a dashboard-only binding would be removed on deploy). Paste your
-# database's ID below — find it at Workers & Pages -> D1 SQL Database ->
+# database's ID below. Find it at Workers & Pages -> D1 SQL Database ->
 # borealis_traffic -> "Database ID" (it is an identifier, not a secret).
 [[d1_databases]]
 binding = "DB"

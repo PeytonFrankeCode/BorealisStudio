@@ -1,11 +1,11 @@
-# Chat session summary — Borealis Software / BorealisStudio
+# Chat session summary: Borealis Software / BorealisStudio
 # Branch: claude/website-logo-descriptions-fn89ij
 session:
   date: 2026-07-16
   repo: PeytonFrankeCode/BorealisStudio
   branch: claude/website-logo-descriptions-fn89ij
   project: >
-    Borealis Software — a public landing page (portfolio) plus a private,
+    Borealis Software: a public landing page (portfolio) plus a private,
     password-protected traffic dashboard, on one Cloudflare Worker + D1 backend.
     Also serves as the studio's portfolio (The Card Huddle is a featured project).
 
@@ -41,24 +41,24 @@ work_completed:
   - title: Deploy diagnosis (not a code bug)
     detail: >
       Site wasn't updating because the "Deploy to Cloudflare" GitHub Action was
-      skipped on every push — repo variable ENABLE_CLOUDFLARE_DEPLOY was never set
+      skipped on every push; repo variable ENABLE_CLOUDFLARE_DEPLOY was never set
       to 'true'. Merges to main were fine; deployment was the gap. Fix: set that
       variable + CLOUDFLARE_API_TOKEN/CLOUDFLARE_ACCOUNT_ID secrets on GitHub (or
       point Cloudflare's watched branch at main).
 
-  - title: Analytics — visitor world map
+  - title: Analytics - visitor world map
     detail: >
       /collect records visitor country (Cloudflare request.cf, ISO alpha-2);
       dashboard shows a dependency-free SVG choropleth (Natural Earth via
       world-atlas) + top-countries list, wired to the range toggle.
 
-  - title: Analytics — city bubbles + bot filtering
+  - title: Analytics - city bubbles + bot filtering
     detail: >
       Added city + coordinates (rounded to 0.1 deg ~11km for privacy; no raw IPs).
       Map shows sized city bubbles + top-cities list. Bots dropped before recording
       via user-agent blocklist + Cloudflare verifiedBotCategory signal.
 
-  - title: Analytics — fine-grained time ranges + per-site maps
+  - title: Analytics - fine-grained time ranges + per-site maps
     detail: >
       Replaced fixed 7/30/90d with windows: 30m, 1h, 6h, 12h, 24h, 3d, 7d, 30d, 90d.
       Moved from day-buckets to timestamp windows (Worker /api/overview?minutes=N,
@@ -66,7 +66,7 @@ work_completed:
       site's detail view has its own location map; overview and detail keep
       independent ranges.
 
-  - title: Bugfix — dashboard chart grew on every redraw
+  - title: Bugfix - dashboard chart grew on every redraw
     detail: >
       drawLineChart read canvas height from the attribute it then overwrote with
       the dpr-scaled value, so each redraw doubled the chart height on HiDPI.
@@ -98,7 +98,7 @@ work_completed:
 
   - title: Manual time entry
     detail: >
-      Added a "+ Add manually" form to each site's time log — pick start/end
+      Added a "+ Add manually" form to each site's time log: pick start/end
       datetimes + optional notes to log a session without the stopwatch. Validated
       (end after start, not future) and sorted into the list by start time.
 
@@ -121,13 +121,13 @@ commits_pushed_to_branch:
 open_items:
   - Merge branch claude/website-logo-descriptions-fn89ij into main to ship all of the above.
   - Set ENABLE_CLOUDFLARE_DEPLOY=true + Cloudflare secrets on GitHub so deploys run
-    (or point Cloudflare's watched branch at main) — otherwise the live site stays frozen.
+    (or point Cloudflare's watched branch at main); otherwise the live site stays frozen.
   - After deploy: verify Google Search Console (HTML tag) and submit sitemap.xml.
   - Optional: replace the traced SVG logo with the exact original PNG if desired.
   - The Card Huddle chat bug must be fixed in that separate repo, not here.
 
 business_qa_notes:
-  # General information discussed, NOT legal/tax advice — user should confirm with a
+  # General information discussed, NOT legal/tax advice; user should confirm with a
   # Texas attorney/CPA and their parents.
   context: User is 16, in Texas, weighing an LLC / how to operate & get paid for a SaaS.
   points:
@@ -142,7 +142,7 @@ business_qa_notes:
         with an SSN/ITIN. Smoother with a parent as responsible party. Never pay a
         third party just for an EIN.
     - llc_required_for_saas: >
-        No — an LLC is not legally required to build/sell a SaaS. Can operate as a
+        No. An LLC is not legally required to build/sell a SaaS. Can operate as a
         sole proprietor. Single-member LLC is taxed the same as a sole prop (no
         default tax break); its value is personal-asset liability protection, which
         matters more once there are real users/revenue.
@@ -150,7 +150,7 @@ business_qa_notes:
         Three different jobs: LLC = shields personal assets; insurance (Tech E&O +
         Cyber for SaaS) = pays claims; Terms of Service + Privacy Policy = reduce
         risk / cap liability. Minor contract-disaffirmance does NOT protect against
-        torts (data breach, IP infringement, privacy-law/COPPA, consumer claims) —
+        torts (data breach, IP infringement, privacy-law/COPPA, consumer claims);
         minors are liable for their own torts. Pre-revenue, the highest-value free
         step is a solid ToS + Privacy Policy and minimizing data collected.
     - getting_paid_age_barrier: >
@@ -160,7 +160,7 @@ business_qa_notes:
     - fiverr: >
         Fiverr terms require 18+ (same barrier). It's a fixed-price gig/deliverable
         marketplace, not subscription SaaS billing, and takes 20%. Custom amounts are
-        possible via Custom Offers + package tiers ($5 min); no true tracked hourly —
+        possible via Custom Offers + package tiers ($5 min); no true tracked hourly;
         that's Upwork's model (10% fee, real hourly + fixed contracts). A "per hour"
         gig can simulate hourly as unit price × quantity. Best fit for Fiverr would
         be freelance web-building services (under a parent's account), not the SaaS.

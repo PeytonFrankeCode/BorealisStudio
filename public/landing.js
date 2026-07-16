@@ -1,4 +1,4 @@
-/* Borealis Software — public landing logic
+/* Borealis Software public landing logic
  * Fetches the public projects feed from the Worker. When opened as a static
  * file (no backend), it shows a small sample so the page still looks complete.
  */
@@ -15,7 +15,7 @@
 
   var SAMPLE = [
     { name: "Borealis Software", url: "https://borealissoftwares.com", domain: "borealissoftwares.com",
-      description: "Our home on the web — the portfolio you're looking at right now.", tags: ["Brand", "Web"], color: "#34c8a3" },
+      description: "Our home on the web: the portfolio you're looking at right now.", tags: ["Brand", "Web"], color: "#34c8a3" },
     { name: "Aurora Portfolio", url: "https://aurora.design", domain: "aurora.design",
       description: "A clean, simple portfolio site for creative work.", tags: ["Next.js", "Design"], color: "#2f8fd0" },
   ];
@@ -76,6 +76,37 @@
     }
     render(SAMPLE);
   }
+
+  /* Mobile navigation */
+  var navToggle = document.getElementById("navToggle");
+  var navLinks = document.getElementById("navLinks");
+  if (navToggle && navLinks) {
+    navToggle.addEventListener("click", function () {
+      var open = navLinks.classList.toggle("open");
+      navToggle.setAttribute("aria-expanded", open ? "true" : "false");
+      navToggle.setAttribute("aria-label", open ? "Close menu" : "Open menu");
+    });
+    // Close the menu after choosing a section.
+    navLinks.addEventListener("click", function (e) {
+      if (e.target.tagName === "A") {
+        navLinks.classList.remove("open");
+        navToggle.setAttribute("aria-expanded", "false");
+      }
+    });
+  }
+
+  /* Reveal sections as they scroll into view */
+  (function () {
+    var items = document.querySelectorAll(".section, .hero");
+    if (!("IntersectionObserver" in window) ||
+        (window.matchMedia && matchMedia("(prefers-reduced-motion: reduce)").matches)) return;
+    var io = new IntersectionObserver(function (entries) {
+      entries.forEach(function (en) {
+        if (en.isIntersecting) { en.target.classList.add("in"); io.unobserve(en.target); }
+      });
+    }, { threshold: 0.12 });
+    items.forEach(function (el) { el.classList.add("reveal"); io.observe(el); });
+  })();
 
   document.getElementById("year").textContent = new Date().getFullYear();
   load();
