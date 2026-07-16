@@ -1,4 +1,4 @@
--- Borealis Software — D1 schema
+-- Borealis Software D1 schema
 CREATE TABLE IF NOT EXISTS sites (
   id          TEXT PRIMARY KEY,
   name        TEXT NOT NULL,

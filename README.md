@@ -3,13 +3,13 @@
 The public site for **Borealis Software** (borealissoftwares.com) plus a
 private traffic dashboard, on one Cloudflare Worker + D1 backend.
 
-> **Setting this up?** Follow **[SETUP.md](SETUP.md)** — a step-by-step,
+> **Setting this up?** Follow **[SETUP.md](SETUP.md)**, a step-by-step,
 > browser-only guide that needs no computer or terminal (works from an iPad).
 > The whole site runs on Cloudflare; your domain points there.
 
-- **Public landing page** (`/`) — a professional, dark "aurora" site that shows
+- **Public landing page** (`/`): a professional, dark "aurora" site that shows
   your projects to visitors. Read-only; it only ever exposes safe project info.
-- **Private dashboard** (`/dashboard.html`) — password-protected. Track real
+- **Private dashboard** (`/dashboard.html`): password-protected. Track real
   pageviews per site, keep private notes, and choose which projects appear on
   the public site.
 
@@ -27,7 +27,7 @@ private traffic dashboard, on one Cloudflare Worker + D1 backend.
   the aurora palette.
 - The **dashboard lives at `/dashboard.html`** and is gated by a passcode.
 - All real data flows through **Cloudflare** (Worker + D1). The front end reaches
-  it by setting one value — `apiBase` in `public/config.js`.
+  it by setting one value, `apiBase` in `public/config.js`.
 
 ### Connect GitHub Pages to Cloudflare (the important step)
 
@@ -48,16 +48,16 @@ window.BOREALIS_CONFIG = {
 - **apiBase empty** → demo/sample mode (no backend), so the page still looks
   complete for previews.
 
-The passcode itself is **not** in this file — it's the `ADMIN_TOKEN` secret on
+The passcode itself is **not** in this file; it's the `ADMIN_TOKEN` secret on
 Cloudflare, typed at the dashboard login screen.
 
 ## Two ways to run it
 
-1. **GitHub Pages front + Cloudflare data (recommended)** — push to publish the
+1. **GitHub Pages front + Cloudflare data (recommended)**: push to publish the
    site from `public/` via `.github/workflows/pages.yml`, set `apiBase` in
    `config.js` to your Worker URL, and deploy the Worker (below). The public
    front is on Pages; all real data is served by Cloudflare behind the passcode.
-2. **All on Cloudflare** — deploy the Worker, which also serves `public/`. Leave
+2. **All on Cloudflare**: deploy the Worker, which also serves `public/`. Leave
    `apiBase` as `""`. Single origin, ideal for `borealissoftwares.com`.
 
 ## How the two sides connect
@@ -65,7 +65,7 @@ Cloudflare, typed at the dashboard login screen.
 Every project you track has a **"Show on public site"** toggle plus a
 description, link, and tags you edit in the dashboard. Public ones are served
 through `/api/projects`, which returns **only** name, link, description, tags,
-and accent color — never traffic numbers or notes. The landing page renders
+and accent color, never traffic numbers or notes. The landing page renders
 that feed.
 
 ## Project layout
@@ -76,7 +76,7 @@ that feed.
 | `public/landing.css`, `public/landing.js` | Landing styles + project feed |
 | `public/dashboard.html` | Private traffic dashboard |
 | `public/app.js`, `public/styles.css` | Dashboard logic + styles |
-| `public/config.js` | Sets `apiBase` — connects the front end to Cloudflare |
+| `public/config.js` | Sets `apiBase`, connecting the front end to Cloudflare |
 | `public/logo.svg` | Borealis aurora logo mark |
 | `worker/index.js` | API, `/collect` beacon, auth, talks to D1 |
 | `schema.sql` | D1 tables (`sites`, `events`, `notes`) |
@@ -90,7 +90,7 @@ manually). The published URL appears in the workflow summary.
 
 ## Deploy to Cloudflare
 
-You can deploy from your machine (below) or automatically from CI — the
+You can deploy from your machine (below) or automatically from CI; the
 `.github/workflows/deploy.yml` workflow runs `wrangler deploy` on every push to
 `main` once you add `CLOUDFLARE_API_TOKEN` and `CLOUDFLARE_ACCOUNT_ID` as
 repository secrets and set the repository variable `ENABLE_CLOUDFLARE_DEPLOY` to
@@ -127,7 +127,7 @@ want to run it:
 - Apex `borealissoftwares.com` → **GitHub Pages**. The `public/CNAME` file
   already requests this domain; in repo **Settings → Pages → Custom domain**
   enter `borealissoftwares.com` and add the DNS records GitHub shows you.
-- The Worker keeps its own address — either its `*.workers.dev` URL or a
+- The Worker keeps its own address: either its `*.workers.dev` URL or a
   subdomain like `api.borealissoftwares.com` (Cloudflare → your Worker →
   **Settings → Domains & Routes → Add custom domain**).
 - Put that Worker address in `public/config.js` as `apiBase`.
@@ -145,11 +145,11 @@ Wrangler prints your Worker URL on deploy (e.g.
 - The dashboard and all admin APIs (`/api/overview`, create/update/delete sites,
   notes) require `Authorization: Bearer <ADMIN_TOKEN>`. The dashboard stores the
   password locally after you log in and sends it with every request.
-- **If `ADMIN_TOKEN` is not set, the admin API is open** — always run
+- **If `ADMIN_TOKEN` is not set, the admin API is open**, so always run
   `wrangler secret put ADMIN_TOKEN` before going public.
 - Public endpoints (`/`, `/api/projects`, `/collect`) need no auth and never
   expose private data.
-- Visitor counts come from a daily one-way hash of IP + user-agent — no cookies,
+- Visitor counts come from a daily one-way hash of IP + user-agent: no cookies,
   no IPs or personal data stored.
 
 ## Add a site and start tracking

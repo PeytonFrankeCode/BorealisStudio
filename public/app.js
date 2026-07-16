@@ -1,4 +1,4 @@
-/* Borealis Software — Traffic Dashboard
+/* Borealis Software Traffic Dashboard
  * Zero-dependency dashboard. Talks to the Cloudflare Worker + D1 backend when
  * served by it (with password auth); falls back to a local demo otherwise.
  */
@@ -209,7 +209,7 @@
   function hideLogin() { const ov = $("#loginBackdrop"); if (ov) ov.hidden = true; }
 
   /* --------------------------- Demo data --------------------------- */
-  // Metadata only (no traffic — that comes from demoEvents).
+  // Metadata only (no traffic; that comes from demoEvents).
   function seedProjects() {
     const presets = [
       { name: "Borealis Software", domain: "borealissoftwares.com", color: "#34c8a3",
@@ -223,7 +223,7 @@
       id: uid(), name: p.name, domain: p.domain, url: "https://" + p.domain,
       description: p.description, tags: p.tags, public: p.public, color: p.color, created: Date.now(),
       notes: p.name === "Borealis Software"
-        ? [{ id: uid(), text: "Launched the new landing page — watching bounce rate this week.", ts: Date.now() - 2 * DAY }]
+        ? [{ id: uid(), text: "Launched the new landing page. Watching bounce rate this week.", ts: Date.now() - 2 * DAY }]
         : [],
     }));
   }
@@ -506,7 +506,7 @@
     const ps = overviewData.projects;
     const grid = $("#statGrid");
     const sub = $("#overviewSub");
-    if (sub) sub.textContent = "Traffic across all your sites — " + rangeLong(globalMin);
+    if (sub) sub.textContent = "Traffic across all your sites · " + rangeLong(globalMin);
 
     const allVisitors = ps.reduce((a, p) => a + (p.totals ? p.totals.visitors : 0), 0);
     const allViews = ps.reduce((a, p) => a + (p.totals ? p.totals.views : 0), 0);
@@ -520,7 +520,7 @@
       statCard("Total visitors", fmt(allVisitors), vDelta) +
       statCard("Total pageviews", fmt(allViews), deltaPct(combined, "views")) +
       statCard("Active sites", String(ps.length)) +
-      statCard("Top site", top ? top.name : "—");
+      statCard("Top site", top ? top.name : "None yet");
 
     $("#trendChip").innerHTML = ps.length ? deltaHtml(vDelta).replace(/<\/?div[^>]*>/g, "") : "";
     $("#projectCount").textContent = ps.length ? `${ps.length} site${ps.length > 1 ? "s" : ""}` : "";
@@ -645,7 +645,7 @@
     if (listEl) {
       listEl.innerHTML = "";
       if (!entries.length) {
-        listEl.appendChild(el("li", "note-empty", "No location data yet — locations are recorded with each new visit."));
+        listEl.appendChild(el("li", "note-empty", "No location data yet. Locations are recorded with each new visit."));
       } else {
         const rows = cities.length
           ? cities.slice(0, 8).map((c) => [c.city, c.visitors])
@@ -811,7 +811,7 @@
       toast("Logged " + humanDuration(log.seconds));
     } catch (err) {
       if (err.status === 401) logout();
-      else toast("Could not save — timer still running");
+      else toast("Could not save; the timer is still running");
     }
   }
 
@@ -878,7 +878,7 @@
 
     list.innerHTML = "";
     if (!logs.length) {
-      list.appendChild(el("li", "tl-empty", "No time logged for this site yet — press Start to begin."));
+      list.appendChild(el("li", "tl-empty", "No time logged for this site yet. Press Start to begin."));
       return;
     }
     logs.forEach((l) => {
@@ -915,7 +915,7 @@
   /* ---------------------------- Detail ----------------------------- */
   function openDetail(id) {
     currentId = id; detailMin = globalMin;
-    detailData = overviewData; // same window — reuse without an extra fetch
+    detailData = overviewData; // same window; reuse without an extra fetch
     editingLogId = null;
     hideManualForm();
     syncRange("#detailRange", detailMin);
@@ -997,7 +997,7 @@
       renderDetail();
       toast("Public profile saved");
     } catch (err) {
-      toast(err.status === 401 ? "Session expired — please unlock" : "Could not save");
+      toast(err.status === 401 ? "Session expired. Please unlock" : "Could not save");
       if (err.status === 401) logout();
     }
   }
@@ -1007,7 +1007,7 @@
     const list = $("#noteList");
     list.innerHTML = "";
     if (!p.notes.length) {
-      list.appendChild(el("li", "note-empty", "No notes yet — add your first one above."));
+      list.appendChild(el("li", "note-empty", "No notes yet. Add your first one above."));
       return;
     }
     [...p.notes].sort((a, b) => b.ts - a.ts).forEach((note) => {
@@ -1030,7 +1030,7 @@
       await reloadAll();
       $("#noteInput").value = ""; renderDetail(); toast("Note added");
     } catch (err) {
-      toast(err.status === 401 ? "Session expired — please unlock" : "Could not add note");
+      toast(err.status === 401 ? "Session expired. Please unlock" : "Could not add note");
       if (err.status === 401) logout();
     }
   }
@@ -1070,7 +1070,7 @@
         await loadOverview();
         renderDashboard();
         toast(`Added ${name}`);
-      } catch (err) { toast(err.status === 401 ? "Session expired — please unlock" : "Could not add site"); if (err.status === 401) logout(); }
+      } catch (err) { toast(err.status === 401 ? "Session expired. Please unlock" : "Could not add site"); if (err.status === 401) logout(); }
       return;
     }
     const mp = {
@@ -1091,7 +1091,7 @@
     if (REMOTE) {
       try {
         await api("/api/sites/" + id, { method: "DELETE" });
-      } catch (err) { return toast(err.status === 401 ? "Session expired — please unlock" : "Could not delete site"); }
+      } catch (err) { return toast(err.status === 401 ? "Session expired. Please unlock" : "Could not delete site"); }
     } else {
       state.projects = state.projects.filter((x) => x.id !== id);
       demoEvents = demoEvents.filter((e) => e.site !== id);
@@ -1106,7 +1106,7 @@
     // The /collect beacon must hit the Cloudflare Worker: prefer the configured
     // apiBase, then the current origin if served by the Worker, else the domain.
     const base = API_BASE || (REMOTE ? location.origin : "https://borealissoftwares.com");
-    return `<!-- Borealis Software analytics — ${p.name} -->
+    return `<!-- Borealis Software analytics for ${p.name} -->
 <script>
 (function(){
   var SITE_ID = "${p.id}";
@@ -1225,7 +1225,7 @@
       navigator.clipboard.writeText($("#snippetCode").textContent).then(() => toast("Snippet copied"));
     });
 
-    // export / import (demo only — metadata + notes)
+    // export / import (demo only: metadata + notes)
     $("#exportBtn").addEventListener("click", () => {
       const blob = new Blob([JSON.stringify({ projects: state.projects }, null, 2)], { type: "application/json" });
       const a = document.createElement("a");
@@ -1262,7 +1262,7 @@
     if (REMOTE) {
       chip.textContent = "● Live";
       chip.classList.add("live");
-      chip.title = "Connected to your Cloudflare backend — tracking real pageviews";
+      chip.title = "Connected to your Cloudflare backend, tracking real pageviews";
       const seed = document.querySelector("label.check");
       if (seed) seed.style.display = "none"; // no fake data in live mode
       $("#importBtn").style.display = "none"; // import can't push to the live DB

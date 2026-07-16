@@ -1,11 +1,11 @@
-# Setup Guide — no computer needed (works from an iPad)
+# Setup Guide: no computer needed (works from an iPad)
 
 You do **not** need to install anything or use a terminal. Everything below is
 done in a web browser (Safari/Chrome on your iPad). The actual building and
 hosting happens on Cloudflare's servers, not your device.
 
-The whole site — your public front page, the password-protected dashboard, and
-your data — runs on **Cloudflare**. Your domain points at Cloudflare. That's it.
+The whole site (your public front page, the password-protected dashboard, and
+your data) runs on **Cloudflare**. Your domain points at Cloudflare. That's it.
 
 ---
 
@@ -13,15 +13,15 @@ your data — runs on **Cloudflare**. Your domain points at Cloudflare. That's i
 
 You need two free accounts (sign up in the browser):
 
-1. **GitHub** — you already have this; your code is at
+1. **GitHub**: you already have this; your code is at
    `github.com/PeytonFrankeCode/BorealisStudio`.
-2. **Cloudflare** — sign up at https://dash.cloudflare.com/sign-up
+2. **Cloudflare**: sign up at https://dash.cloudflare.com/sign-up
 
 You also need your domain **borealissoftwares.com** (you have this).
 
 ---
 
-## Step 1 — Merge the pull request
+## Step 1: Merge the pull request
 
 1. Open https://github.com/PeytonFrankeCode/BorealisStudio/pull/1
 2. Tap **Merge pull request**, then **Confirm merge**.
@@ -30,12 +30,12 @@ This puts all the finished code on your `main` branch.
 
 ---
 
-## Step 2 — Create the project on Cloudflare
+## Step 2: Create the project on Cloudflare
 
 1. Go to https://dash.cloudflare.com and sign in.
 2. In the left menu tap **Workers & Pages**.
 3. Tap **Create** → choose the **Workers** tab → **Import a repository**
-   (you may be asked to connect your GitHub account — approve it, and give it
+   (you may be asked to connect your GitHub account. Approve it, and give it
    access to the **BorealisStudio** repo).
 4. Pick the **BorealisStudio** repository.
 5. When asked for build settings, leave them as the defaults and tap
@@ -43,14 +43,14 @@ This puts all the finished code on your `main` branch.
 
 Cloudflare reads the `wrangler.toml` in your repo, builds the Worker, and puts
 it online. The first deploy gives you a temporary address like
-`https://borealis-softwares.<something>.workers.dev` — tap it to see your site.
+`https://borealis-softwares.<something>.workers.dev`. Tap it to see your site.
 
 > From now on, every time code changes on `main`, Cloudflare re-deploys
 > automatically. No tokens, no terminal.
 
 ---
 
-## Step 3 — Create the database (D1) and connect it
+## Step 3: Create the database (D1) and connect it
 
 The site needs a database to store traffic and notes.
 
@@ -65,7 +65,7 @@ The site needs a database to store traffic and notes.
    `schema.sql` file from your repo, and tap **Execute**. (Open `schema.sql` on
    GitHub, tap the **Copy raw file** button, then paste it here.)
    *(If you skip this, the app also creates the tables automatically on first
-   use — but doing it now is cleaner.)*
+   use, but doing it now is cleaner.)*
 4. Now link the database to your Worker: go to **Workers & Pages** → your
    **borealis-softwares** worker → **Settings** → **Bindings** →
    **Add** → **D1 database**:
@@ -75,7 +75,7 @@ The site needs a database to store traffic and notes.
 
 ---
 
-## Step 4 — Set your dashboard passcode
+## Step 4: Set your dashboard passcode
 
 This is the password you'll type to open the dashboard.
 
@@ -87,11 +87,11 @@ This is the password you'll type to open the dashboard.
    - Tap **Save**.
 
 That's your dashboard passcode. Without it set, the dashboard would be open to
-anyone — so don't skip this before going public.
+anyone, so don't skip this before going public.
 
 ---
 
-## Step 5 — Put it on your domain
+## Step 5: Put it on your domain
 
 1. In Cloudflare, add your site: top of dashboard → **Add a site** →
    enter `borealissoftwares.com` → follow the prompts. Cloudflare will give you
@@ -103,11 +103,11 @@ anyone — so don't skip this before going public.
    worker → **Settings** → **Domains & Routes** → **Add** → **Custom domain** →
    enter `borealissoftwares.com` (and optionally `www.borealissoftwares.com`).
 
-Done — your site is live at **https://borealissoftwares.com**.
+Done! Your site is live at **https://borealissoftwares.com**.
 
 ---
 
-## Step 6 — Start tracking your sites
+## Step 6: Start tracking your sites
 
 1. Visit **https://borealissoftwares.com/dashboard.html**
 2. Enter your passcode (from Step 4).
@@ -135,7 +135,7 @@ and flip **Show on public site** to feature it on your front page.
 - **Front page shows example projects (Aurora Portfolio, etc.):** those are
   samples shown until the database is connected and you've added your own sites.
   Recheck Step 3 (the `DB` binding) and Step 6.
-- **Dashboard never asks for a passcode:** the `ADMIN_TOKEN` secret isn't set —
+- **Dashboard never asks for a passcode:** the `ADMIN_TOKEN` secret isn't set;
   redo Step 4.
 - **"Incorrect password":** the passcode must match the `ADMIN_TOKEN` value
   exactly.
