@@ -110,6 +110,9 @@ main { position: relative; z-index: 1; max-width: 1100px; margin: 0 auto; paddin
 .work-card .desc { color: var(--muted); font-size: 15px; flex: 1; }
 .work-card .tags { display: flex; flex-wrap: wrap; gap: 7px; margin: 16px 0 18px; }
 .work-card .tag { font-size: 12px; font-weight: 600; color: #cdd7ee; background: rgba(255,255,255,0.06); border: 1px solid var(--border); border-radius: 20px; padding: 4px 11px; }
+.work-card .tag-status { display: inline-flex; align-items: center; gap: 7px; color: var(--accent); border-color: rgba(52,200,163,0.4); background: rgba(52,200,163,0.08); }
+.pulse-dot { width: 7px; height: 7px; border-radius: 50%; background: var(--accent); box-shadow: 0 0 8px rgba(52,200,163,0.7); animation: pulse 1.6s ease-in-out infinite; }
+@keyframes pulse { 0%, 100% { opacity: 1; } 50% { opacity: 0.35; } }
 .work-card .visit { display: inline-flex; align-items: center; gap: 6px; font-weight: 600; font-size: 14px; color: var(--accent); text-decoration: none; align-self: flex-start; }
 .work-card .visit:hover { filter: brightness(1.15); text-decoration: underline; text-underline-offset: 3px; }
 .loading { color: var(--muted); padding: 30px 0; }
@@ -162,6 +165,7 @@ main { position: relative; z-index: 1; max-width: 1100px; margin: 0 auto; paddin
 @media (prefers-reduced-motion: reduce) {
   html { scroll-behavior: auto; }
   .aurora { animation: none; }
+  .pulse-dot { animation: none; }
   .reveal { opacity: 1; transform: none; transition: none; }
   .btn, .work-card, .card, .step { transition: none; }
 }

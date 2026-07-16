@@ -11,7 +11,15 @@
       url: "https://thecardhuddle.com", domain: "thecardhuddle.com",
       description: "Find. Collect. Track. A home for sports card collectors to browse cards and keep tabs on their collection.",
       tags: ["Sports cards", "Web app"], color: "#2e8b57" },
+    { name: "EQV Group", logo: "eqv.png",
+      url: "https://eqvgroupui.thecardhuddleoffical.workers.dev", linkLabel: "the EQV site",
+      description: "A new web platform for EQV Group, currently in active development.",
+      tags: ["Web app"], status: "Ongoing project", color: "#2f8fd0" },
   ];
+
+  // Projects that must never appear on the public landing page, even if the
+  // live feed marks them public. Matches the exact name or a leading "RIP ".
+  var HIDDEN = /^rip\b/i;
 
   var SAMPLE = [
     { name: "Borealis Software", url: "https://borealissoftwares.com", domain: "borealissoftwares.com",
@@ -28,8 +36,9 @@
 
   function card(p) {
     var url = p.url || (p.domain ? "https://" + p.domain : "");
-    var label = (p.domain || url).replace(/^https?:\/\//, "").replace(/\/$/, "");
+    var label = p.linkLabel || (p.domain || url).replace(/^https?:\/\//, "").replace(/\/$/, "");
     var tags = (p.tags || []).map(function (t) { return '<span class="tag">' + esc(t) + "</span>"; }).join("");
+    if (p.status) tags = '<span class="tag tag-status"><i class="pulse-dot"></i>' + esc(p.status) + "</span>" + tags;
     var logo = p.logo ? '<img class="card-logo" src="' + esc(p.logo) + '" alt="' + esc(p.name) + ' logo" />' : "";
     var visit = url ? '<a class="visit" href="' + esc(url) + '" target="_blank" rel="noopener">Visit ' + esc(label) + " ↗</a>" : "";
     return '' +
@@ -51,7 +60,8 @@
     var seen = {};
     FEATURED.forEach(function (p) { seen[p.name.toLowerCase()] = true; });
     var list = FEATURED.concat((projects || []).filter(function (p) {
-      return !seen[String(p.name || "").toLowerCase()];
+      var name = String(p.name || "");
+      return !seen[name.toLowerCase()] && !HIDDEN.test(name.trim());
     }));
     if (!list.length) {
       grid.innerHTML = "";
