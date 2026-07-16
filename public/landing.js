@@ -13,6 +13,10 @@
       tags: ["Sports cards", "Web app"], color: "#2e8b57" },
   ];
 
+  // Projects that must never appear on the public landing page, even if the
+  // live feed marks them public. Matches the exact name or a leading "RIP ".
+  var HIDDEN = /^rip\b/i;
+
   var SAMPLE = [
     { name: "Borealis Software", url: "https://borealissoftwares.com", domain: "borealissoftwares.com",
       description: "Our home on the web: the portfolio you're looking at right now.", tags: ["Brand", "Web"], color: "#34c8a3" },
@@ -51,7 +55,8 @@
     var seen = {};
     FEATURED.forEach(function (p) { seen[p.name.toLowerCase()] = true; });
     var list = FEATURED.concat((projects || []).filter(function (p) {
-      return !seen[String(p.name || "").toLowerCase()];
+      var name = String(p.name || "");
+      return !seen[name.toLowerCase()] && !HIDDEN.test(name.trim());
     }));
     if (!list.length) {
       grid.innerHTML = "";
