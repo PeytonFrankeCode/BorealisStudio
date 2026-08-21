@@ -336,7 +336,9 @@
         cities.push({ site: mp.id, country: c.country, city: c.city, lat: c.lat, lon: c.lon, visitors: c.set.size });
       });
     });
-    return { window: { minutes: min, bucketMs: plan.bucketMs, count: plan.count, since: since }, projects: projects, geo: { countries: countries, cities: cities } };
+    // Rough demo bot volume: crawlers scale with the window and site count.
+    const botsFiltered = Math.round((min / 1440) * 32 * Math.max(1, state.projects.length));
+    return { window: { minutes: min, bucketMs: plan.bucketMs, count: plan.count, since: since }, projects: projects, geo: { countries: countries, cities: cities }, botsFiltered: botsFiltered };
   }
 
   /* ----------------------------- Utils ----------------------------- */
@@ -516,10 +518,11 @@
     let top = null, topV = -1;
     ps.forEach((p) => { const v = p.totals ? p.totals.visitors : 0; if (v > topV) { topV = v; top = p; } });
 
+    const bots = overviewData.botsFiltered || 0;
     grid.innerHTML =
       statCard("Total visitors", fmt(allVisitors), vDelta) +
       statCard("Total pageviews", fmt(allViews), deltaPct(combined, "views")) +
-      statCard("Active sites", String(ps.length)) +
+      statCard("Bots filtered", "🤖 " + fmt(bots)) +
       statCard("Top site", top ? top.name : "—");
 
     $("#trendChip").innerHTML = ps.length ? deltaHtml(vDelta).replace(/<\/?div[^>]*>/g, "") : "";

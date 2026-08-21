@@ -108,24 +108,31 @@ function authed(request, env) {
 
 async function collect(request, env, url, cors) {
   const site = url.searchParams.get("site");
-  if (site && !isBot(request)) {
+  if (site) {
     const exists = await env.DB.prepare("SELECT 1 FROM sites WHERE id = ?").bind(site).first();
     if (exists) {
-      const path = clip(url.searchParams.get("path") || "/", 512);
-      const ip = request.headers.get("cf-connecting-ip") || "0";
-      const ua = request.headers.get("user-agent") || "";
-      const cf = request.cf || {};
-      const country = clip(cf.country || "", 2).toUpperCase();
-      const city = clip(cf.city || "", 80);
-      // Coordinates come from Cloudflare's GeoIP (city-level). Rounded to
-      // 0.1 degrees (~11 km) so we never store anything close to a pinpoint.
-      const lat = cf.latitude != null ? Math.round(parseFloat(cf.latitude) * 10) / 10 : null;
-      const lon = cf.longitude != null ? Math.round(parseFloat(cf.longitude) * 10) / 10 : null;
-      const day = new Date().toISOString().slice(0, 10);
-      const visitor = await sha256(`${site}|${day}|${ip}|${ua}`);
-      await env.DB.prepare(
-        "INSERT INTO events (site_id, day, path, visitor, country, city, lat, lon, ts) VALUES (?,?,?,?,?,?,?,?,?)"
-      ).bind(site, day, path, visitor, country, city, lat, lon, Date.now()).run();
+      if (isBot(request)) {
+        // Count filtered bot/crawler hits (Googlebot, AdSense review, SEO
+        // scanners, etc.) so the dashboard can show them without letting them
+        // pollute real visitor stats.
+        await env.DB.prepare("INSERT INTO bot_hits (site_id, ts) VALUES (?,?)").bind(site, Date.now()).run();
+      } else {
+        const path = clip(url.searchParams.get("path") || "/", 512);
+        const ip = request.headers.get("cf-connecting-ip") || "0";
+        const ua = request.headers.get("user-agent") || "";
+        const cf = request.cf || {};
+        const country = clip(cf.country || "", 2).toUpperCase();
+        const city = clip(cf.city || "", 80);
+        // Coordinates come from Cloudflare's GeoIP (city-level). Rounded to
+        // 0.1 degrees (~11 km) so we never store anything close to a pinpoint.
+        const lat = cf.latitude != null ? Math.round(parseFloat(cf.latitude) * 10) / 10 : null;
+        const lon = cf.longitude != null ? Math.round(parseFloat(cf.longitude) * 10) / 10 : null;
+        const day = new Date().toISOString().slice(0, 10);
+        const visitor = await sha256(`${site}|${day}|${ip}|${ua}`);
+        await env.DB.prepare(
+          "INSERT INTO events (site_id, day, path, visitor, country, city, lat, lon, ts) VALUES (?,?,?,?,?,?,?,?,?)"
+        ).bind(site, day, path, visitor, country, city, lat, lon, Date.now()).run();
+      }
     }
   }
   return new Response(PIXEL, {
@@ -243,10 +250,16 @@ async function overview(env, url, cors) {
     });
   }
 
+  // Bots/crawlers filtered out over the window, across all sites.
+  const botRow = (await env.DB.prepare(
+    "SELECT COUNT(*) AS n FROM bot_hits WHERE ts >= ?"
+  ).bind(since).first()) || { n: 0 };
+
   return json({
     window: { minutes, bucketMs, count, since },
     projects,
     geo: { countries: geoCountries, cities: geoCities },
+    botsFiltered: botRow.n || 0,
   }, cors);
 }
 
@@ -371,6 +384,11 @@ async function ensureSchema(env) {
       "start INTEGER NOT NULL, end INTEGER NOT NULL, seconds INTEGER NOT NULL, " +
       "notes TEXT NOT NULL DEFAULT '', created INTEGER NOT NULL)"
     ),
+    env.DB.prepare(
+      "CREATE TABLE IF NOT EXISTS bot_hits (id INTEGER PRIMARY KEY AUTOINCREMENT, " +
+      "site_id TEXT NOT NULL, ts INTEGER NOT NULL)"
+    ),
+    env.DB.prepare("CREATE INDEX IF NOT EXISTS idx_bot_hits_ts ON bot_hits (ts)"),
   ]);
   // Best-effort migrations for databases created before the public fields existed.
   for (const col of [

@@ -33,6 +33,15 @@ CREATE TABLE IF NOT EXISTS notes (
 );
 CREATE INDEX IF NOT EXISTS idx_notes_site ON notes (site_id);
 
+-- Filtered bot/crawler hits (Googlebot, AdSense review, SEO scanners), kept
+-- separate from `events` so they never pollute real visitor stats.
+CREATE TABLE IF NOT EXISTS bot_hits (
+  id      INTEGER PRIMARY KEY AUTOINCREMENT,
+  site_id TEXT NOT NULL,
+  ts      INTEGER NOT NULL
+);
+CREATE INDEX IF NOT EXISTS idx_bot_hits_ts ON bot_hits (ts);
+
 -- Time-tracking log (stopwatch sessions), one per site.
 CREATE TABLE IF NOT EXISTS time_logs (
   id      TEXT PRIMARY KEY,
